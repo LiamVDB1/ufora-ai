@@ -133,6 +133,6 @@ def test_skill_install_writes_bundled_skill(tmp_path):
     assert result.exit_code == 0, result.output
     skill = destination / "SKILL.md"
     assert skill.exists()
-    text = skill.read_text()
+    text = skill.read_text(encoding="utf-8")
     assert "# Ufora AI" in text
     assert "read_course_material" in text
