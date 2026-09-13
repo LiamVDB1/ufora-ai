@@ -1,0 +1,19 @@
+cff-version: 1.2.0
+title: Ufora AI
+message: If you use Ufora AI in research, teaching tooling, or a publication, please cite the software repository.
+type: software
+authors:
+  - family-names: Van den Broeck
+    given-names: Liam
+version: 1.0.0
+date-released: 2026-09-13
+url: https://github.com/LiamVDB1/ufora-ai
+repository-code: https://github.com/LiamVDB1/ufora-ai
+license: MIT
+keywords:
+  - UGent
+  - Ufora
+  - Brightspace
+  - MCP
+  - education
+  - AI

@@ -1,0 +1,49 @@
+name: Bug report
+description: Report a reproducible Ufora AI problem without exposing private student data.
+title: "[bug] "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do **not** paste passwords, bearer tokens, cookies, `~/.d2l/`, grades, or private course material. Security issues should use a private GitHub Security Advisory.
+  - type: input
+    id: version
+    attributes:
+      label: Ufora AI version
+      description: Output of `ufora --version`
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options: [macOS, Linux, Windows, Other]
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction steps
+      description: Use synthetic/redacted course names and data where possible.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy check
+      options:
+        - label: I removed credentials, tokens, cookies, grades, personal identifiers, and private course content from this report.
+          required: true
