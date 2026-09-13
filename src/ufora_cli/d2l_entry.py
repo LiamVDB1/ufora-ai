@@ -10,15 +10,20 @@ stable machine-readable ``OrgUnit.Type.Code`` field, which remains
 
 from __future__ import annotations
 
-from datetime import datetime
 import importlib
 import re
+import sys
+import time
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 import click
-from urllib.parse import unquote
-
-from d2l.errors import D2LError
+from d2l import auth as d2l_auth
+from d2l.errors import D2LError, TokenExpiredError, TokenNotFoundError
 from d2l.resolver import CourseResolver
+
+from . import __version__
+from .core import _translate_upstream_text
 
 
 def _is_course_offering(enrollment: dict) -> bool:
@@ -29,10 +34,38 @@ def _is_course_offering(enrollment: dict) -> bool:
     )
 
 
-def _academic_year_start() -> int:
-    """Return the UGent academic-year start year for today's date."""
-    now = datetime.now()
-    return now.year if now.month >= 9 else now.year - 1
+UGENT_TIMEZONE = ZoneInfo("Europe/Brussels")
+
+
+def _load_saved_token_only() -> str:
+    """Load only Ufora's fixed local token file; never inherit cwd/env credentials."""
+    data = d2l_auth._read_token_file()
+    if not isinstance(data, dict):
+        raise TokenNotFoundError("No saved Ufora token found. Run: ufora login")
+
+    token = data.get("token")
+    claims = d2l_auth._parse_bearer_claims(token)
+    if not claims:
+        raise TokenNotFoundError("Saved Ufora token is invalid. Run: ufora login")
+
+    exp = claims.get("exp", data.get("exp", 0))
+    if not isinstance(exp, int | float) or exp <= time.time():
+        raise TokenExpiredError("Saved Ufora token is expired. Run: ufora login")
+    return token
+
+
+def _patch_auth_sources() -> None:
+    """Keep Ufora authentication scoped to ~/.d2l rather than cwd/.env/process env."""
+    d2l_auth.load_token = _load_saved_token_only
+    loaded_cli = sys.modules.get("d2l.cli")
+    if loaded_cli is not None:
+        loaded_cli.load_token = _load_saved_token_only
+
+
+def _academic_year_start(now: datetime | None = None) -> int:
+    """Return the UGent academic-year start year using the Brussels local date."""
+    local_now = (now or datetime.now(UGENT_TIMEZONE)).astimezone(UGENT_TIMEZONE)
+    return local_now.year if local_now.month >= 9 else local_now.year - 1
 
 
 def _offering_year(enrollment: dict) -> int | None:
@@ -56,8 +89,7 @@ def _list_courses(self: CourseResolver):
     """
     offerings = _all_courses(self)
     year = _academic_year_start()
-    current = [e for e in offerings if _offering_year(e) == year]
-    return current or offerings
+    return [e for e in offerings if _offering_year(e) == year]
 
 
 def _disambiguate(self: CourseResolver, query: str, matches: list[dict]):
@@ -79,6 +111,39 @@ def _patch_resolver() -> None:
     CourseResolver.list_courses = _list_courses
     CourseResolver.all_enrollments = _all_courses
     CourseResolver._disambiguate = _disambiguate
+
+
+def _clean_doctor_checks(checks: list[dict]) -> list[dict]:
+    """Remove upstream-only diagnostics and expose only valid Ufora recovery steps."""
+    cleaned: list[dict] = []
+    for raw in checks:
+        if raw.get("check") in {"syllabus", "onboarding"}:
+            continue
+
+        check = dict(raw)
+        if check.get("check") == "cli":
+            check["detail"] = f"Ufora AI {__version__}"
+        else:
+            check["detail"] = _translate_upstream_text(str(check.get("detail") or ""))
+        if check.get("check") == "courses" and check.get("ok"):
+            check["detail"] = str(check["detail"]).replace("active course(s)", "current course(s)")
+
+        next_step = check.get("next_step")
+        if next_step:
+            check["next_step"] = _translate_upstream_text(str(next_step))
+        cleaned.append(check)
+    return cleaned
+
+
+def _patch_doctor() -> None:
+    """Keep upstream doctor useful without leaking unsupported d2l-cli features."""
+    doctor_module = importlib.import_module("d2l.commands.doctor")
+    original_run_checks = doctor_module._run_checks
+
+    def run_checks():
+        return _clean_doctor_checks(original_run_checks())
+
+    doctor_module._run_checks = run_checks
 
 
 def _patch_dump() -> None:
@@ -150,26 +215,31 @@ def _patch_content() -> None:
     content_module._print_toc = print_toc
 
 
-def _patch_download() -> None:
-    """Decode URL-escaped filenames returned by Ufora download headers."""
-    download_module = importlib.import_module("d2l.commands.download")
-    original = download_module._filename_from_response
-
-    def decoded_filename(response, fallback):
-        return unquote(original(response, fallback))
-
-    download_module._filename_from_response = decoded_filename
+def _strip_internal_commands(cli_group: click.Group) -> None:
+    """Remove upstream commands that Ufora AI does not expose or need internally."""
+    for name in (
+        "download",
+        "download-content",
+        "onboard",
+        "setup",
+        "skill",
+        "syllabus",
+        "update",
+    ):
+        cli_group.commands.pop(name, None)
 
 
 def main() -> None:
+    _patch_auth_sources()
     _patch_resolver()
+    _patch_doctor()
     _patch_dump()
     _patch_content()
-    _patch_download()
     # Import after patching. Command modules construct CourseResolver at runtime,
     # so all d2l-cli commands now see the corrected UGent behavior.
     from d2l.cli import cli
 
+    _strip_internal_commands(cli)
     cli(prog_name="ufora")
 
 

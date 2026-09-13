@@ -21,20 +21,26 @@ Depending on the command/tool you invoke, Ufora AI may process:
 - enrolled course metadata;
 - announcements and course content;
 - grades and feedback;
-- assignments, quizzes, discussions, deadlines, and calendar events;
+- assignments, quizzes, discussion-forum metadata, deadlines, and calendar events;
 - files you explicitly ask it to read or download.
 
 This processing occurs on your machine in v1.
 
 ## MCP clients
 
-An MCP client can receive whatever data you ask Ufora AI to return. The privacy policy and data handling of that client are separate from this project. Before connecting an AI client, understand where that client sends and stores tool results.
+An MCP client can receive whatever data you ask Ufora AI to return. The privacy policy and data handling of that client are separate from this project. Before connecting an AI client, understand where that client sends and stores tool results. In particular, a cloud-hosted AI client may send requested course content, grades, identity data, or other tool output off your device under that provider's own terms even though Ufora AI itself has no backend.
+
+UGent's current student IT-security guidance says not to store confidential information (including personal data) on cloud services whose data storage is outside the EEA. Ufora data can contain personal/confidential information, so **do not assume that an arbitrary personal cloud-AI account is an institutionally acceptable destination for Ufora data**. A local AI client avoids that cloud-storage boundary; an institutionally promoted cloud-AI setup should be reviewed by UGent for data residency, retention, access, and contractual terms.
+
+For ChatGPT specifically, European data residency is currently an organizational feature for eligible Enterprise/Edu workspaces (and eligible API customers), not something this project can guarantee for a student's personal account. The appropriate ChatGPT deployment for an UGent-backed workflow should therefore be decided with UGent rather than inferred by Ufora AI.
 
 Ufora AI does not silently send your Ufora data to an AI provider. The MCP client decides when to call tools and how to use their output.
 
 ## Credentials
 
 Treat `~/.d2l/` as sensitive. It can contain bearer-token/session material and an authenticated browser profile. Ufora AI attempts to apply private filesystem permissions where supported.
+
+Run `ufora logout` to remove the cached token and dedicated browser profile from the local machine when you no longer want the integration connected. This removes local copies; it is not represented as a server-side Brightspace token revocation.
 
 Do not upload this directory to issue trackers, cloud drives, public repositories, or debugging services.
 

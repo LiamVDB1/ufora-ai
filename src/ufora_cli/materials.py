@@ -1,41 +1,62 @@
 from __future__ import annotations
 
-from io import BytesIO
 import logging
 import os
-from pathlib import Path
 import re
+from io import BytesIO
+from pathlib import Path
 from typing import Any
 from urllib.parse import unquote
 
 from d2l.errors import ForbiddenError, NotFoundError
 from pypdf import PdfReader
 
-from .core import UFORA_HOST, UforaError, _translate_upstream_text
-from .d2l_entry import _patch_resolver
-
+from .core import (
+    UFORA_HOST,
+    UforaError,
+    _translate_upstream_text,
+    harden_d2l_state,
+    sanitize_untrusted_data,
+    sanitize_untrusted_text,
+)
+from .d2l_entry import _patch_auth_sources, _patch_resolver
 
 MAX_MATERIAL_BYTES = 50 * 1024 * 1024
+DEFAULT_HTTP_TIMEOUT_SECONDS = 30
 
 
 class MaterialNotFound(UforaError):
     pass
 
 
+def _apply_default_timeout(session: Any) -> Any:
+    """Ensure direct Brightspace HTTP calls cannot wait forever."""
+    original_request = session.request
+
+    def request(method: str, url: str, **kwargs: Any):
+        kwargs.setdefault("timeout", DEFAULT_HTTP_TIMEOUT_SECONDS)
+        return original_request(method, url, **kwargs)
+
+    session.request = request
+    return session
+
+
 def _client_and_resolver():
+    harden_d2l_state()
     os.environ["D2L_HOST"] = UFORA_HOST
+    _patch_auth_sources()
     _patch_resolver()
 
-    from d2l.cli import _resolve_token
     from d2l.auth import make_session
+    from d2l.cli import _resolve_token
     from d2l.client import D2LClient
     from d2l.resolver import CourseResolver
 
     try:
         token = _resolve_token()
     except Exception as exc:
-        raise UforaError(_translate_upstream_text(str(exc))) from exc
-    client = D2LClient(make_session(token))
+        raise UforaError(sanitize_untrusted_text(_translate_upstream_text(str(exc)))) from exc
+    client = D2LClient(_apply_default_timeout(make_session(token)))
     return client, CourseResolver(client)
 
 
@@ -58,17 +79,19 @@ def get_course_overview(course: str) -> dict[str, Any]:
     org = enrollment["OrgUnit"]
     overview = _overview_for(client, org["Id"])
     if overview is None:
-        return {"course": _course_identity(org), "overview": None}
+        return sanitize_untrusted_data({"course": _course_identity(org), "overview": None})
 
     description = overview.get("Description") or {}
-    return {
-        "course": _course_identity(org),
-        "overview": {
-            "description_text": description.get("Text", "") if isinstance(description, dict) else "",
-            "description_html": description.get("Html", "") if isinstance(description, dict) else "",
-            "has_attachment": bool(overview.get("HasAttachment")),
-        },
-    }
+    return sanitize_untrusted_data(
+        {
+            "course": _course_identity(org),
+            "overview": {
+                "description_text": description.get("Text", "") if isinstance(description, dict) else "",
+                "description_html": description.get("Html", "") if isinstance(description, dict) else "",
+                "has_attachment": bool(overview.get("HasAttachment")),
+            },
+        }
+    )
 
 
 def _walk_content_items(node: Any, path: tuple[str, ...] = ()):
@@ -296,11 +319,13 @@ def search_course_content(course: str, query: str, *, limit: int = 20) -> dict[s
             }
         )
 
-    return {
-        "course": _course_identity(org),
-        "query": query,
-        "matches": matches,
-    }
+    return sanitize_untrusted_data(
+        {
+            "course": _course_identity(org),
+            "query": query,
+            "matches": matches,
+        }
+    )
 
 
 def _ambiguous_content_message(
@@ -329,8 +354,33 @@ def _ambiguous_message(query: str, matches: list[tuple[tuple[str, ...], dict[str
 
 
 def _safe_filename(value: str, fallback: str) -> str:
-    name = Path(str(value).replace("\\", "/")).name.strip()
-    return name if name not in {"", ".", ".."} else fallback
+    raw = str(value)
+    if any(ord(char) < 32 or 127 <= ord(char) < 160 for char in raw):
+        return fallback
+    name = Path(raw.replace("\\", "/")).name.strip()
+    if name in {"", ".", ".."} or name.startswith("."):
+        return fallback
+    name = "".join("_" if char in '<>:"/\\|?*' else char for char in name).rstrip(" .")
+    if not name:
+        return fallback
+    reserved = {"CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in range(1, 10)), *(f"LPT{i}" for i in range(1, 10))}
+    if name.split(".", 1)[0].upper() in reserved:
+        return fallback
+    if len(name.encode("utf-8")) > 200:
+        return fallback
+    return name
+
+
+def _write_new_file(path: Path, content: bytes) -> None:
+    """Write a downloaded file without ever replacing an existing path."""
+    try:
+        with path.open("xb") as handle:
+            handle.write(content)
+    except FileExistsError as exc:
+        raise UforaError(
+            f"Refusing to overwrite existing file: {path}. "
+            "Choose another output directory or remove the existing file yourself."
+        ) from exc
 
 
 def _filename(response, topic: dict[str, Any]) -> str:
@@ -387,7 +437,7 @@ def download_single_content_file(
     destination = Path(out_dir).expanduser()
     destination.mkdir(parents=True, exist_ok=True)
     file_path = destination / filename
-    file_path.write_bytes(response.content)
+    _write_new_file(file_path, response.content)
     return {
         "course": _course_identity(org),
         "kind": kind,
@@ -398,6 +448,127 @@ def download_single_content_file(
         "path": str(file_path.resolve()),
         "size_bytes": len(response.content),
     }
+
+
+def download_content_files(
+    course: str,
+    target: str,
+    out_dir: str | Path,
+) -> list[dict[str, Any]]:
+    """Download one file-backed topic or every file below a module safely."""
+    single = download_single_content_file(course, target, out_dir)
+    if single is not None:
+        return [single]
+
+    client, resolver = _client_and_resolver()
+    enrollment = resolver.resolve(course)
+    org = enrollment["OrgUnit"]
+    org_id = org["Id"]
+    toc = client.content_toc(org_id)
+    if not isinstance(toc, dict):
+        toc = {"Modules": []}
+    overview = _overview_for(client, org_id)
+    kind, _path, item = _find_content_item(toc, target, overview=overview)
+    if kind != "module":
+        raise UforaError(f"'{target}' is not a downloadable module or file.")
+
+    destination = Path(out_dir).expanduser()
+    destination.mkdir(parents=True, exist_ok=True)
+    results: list[dict[str, Any]] = []
+    module_root = {"Modules": [item]}
+    for topic_path, topic in _walk_topics(module_root):
+        is_file = topic.get("TypeIdentifier") == "File" or topic.get("TopicType") == 1
+        if not is_file:
+            continue
+        item_id = topic.get("TopicId") or topic.get("Id")
+        if item_id is None:
+            continue
+        response = client.content_topic_file(org_id, int(item_id))
+        fallback = f"topic-{item_id}"
+        filename = _safe_filename(_filename(response, topic), fallback)
+        file_path = destination / filename
+        _write_new_file(file_path, response.content)
+        results.append(
+            {
+                "course": _course_identity(org),
+                "kind": "topic",
+                "module_path": list(topic_path),
+                "item_id": item_id,
+                "title": topic.get("Title"),
+                "filename": filename,
+                "path": str(file_path.resolve()),
+                "size_bytes": len(response.content),
+            }
+        )
+    return results
+
+
+def _match_assignment(assignments: list[dict[str, Any]], query: str) -> dict[str, Any]:
+    value = query.strip()
+    if not value:
+        raise UforaError("assignment query must not be empty")
+    if value.isdigit():
+        for assignment in assignments:
+            if str(assignment.get("Id")) == value:
+                return assignment
+    folded = value.casefold()
+    exact = [item for item in assignments if str(item.get("Name") or "").casefold() == folded]
+    if len(exact) == 1:
+        return exact[0]
+    partial = [item for item in assignments if folded in str(item.get("Name") or "").casefold()]
+    if len(partial) == 1:
+        return partial[0]
+    if len(partial) > 1:
+        choices = ", ".join(f"[{item.get('Id')}] {item.get('Name')}" for item in partial[:20])
+        raise UforaError(f"Multiple assignments match '{query}': {choices}")
+    raise UforaError(f"No assignment matching '{query}'. Use `ufora assignments COURSE` first.")
+
+
+def download_assignment_files(
+    course: str,
+    assignment: str,
+    out_dir: str | Path,
+) -> list[dict[str, Any]]:
+    """Download assignment attachments without replacing existing local files."""
+    client, resolver = _client_and_resolver()
+    enrollment = resolver.resolve(course)
+    org = enrollment["OrgUnit"]
+    org_id = org["Id"]
+    assignments = client.assignments(org_id)
+    if not isinstance(assignments, list):
+        assignments = []
+    matched = _match_assignment(assignments, assignment)
+    folder_id = matched.get("Id")
+    if folder_id is None:
+        raise UforaError("Matched assignment has no Brightspace ID.")
+
+    destination = Path(out_dir).expanduser()
+    destination.mkdir(parents=True, exist_ok=True)
+    results: list[dict[str, Any]] = []
+    for attachment in matched.get("Attachments", []) or []:
+        if not isinstance(attachment, dict):
+            continue
+        file_id = attachment.get("FileId")
+        if file_id is None:
+            continue
+        response = client.assignment_attachment(org_id, folder_id, file_id)
+        fallback = f"assignment-{folder_id}-file-{file_id}"
+        supplied_name = unquote(str(attachment.get("FileName") or fallback))
+        response_name = _filename(response, {"Title": supplied_name})
+        filename = _safe_filename(response_name, fallback)
+        file_path = destination / filename
+        _write_new_file(file_path, response.content)
+        results.append(
+            {
+                "course": _course_identity(org),
+                "assignment": {"id": folder_id, "name": matched.get("Name")},
+                "file_id": file_id,
+                "filename": filename,
+                "path": str(file_path.resolve()),
+                "size_bytes": len(response.content),
+            }
+        )
+    return results
 
 
 def _extract_text(content: bytes, filename: str, content_type: str) -> tuple[str | None, str]:
@@ -514,7 +685,7 @@ def read_material(course: str, material: str, *, max_chars: int = 60_000) -> dic
                 {"Title": "course-overview-attachment"},
                 max_chars=max_chars,
             )
-        return result
+        return sanitize_untrusted_data(result)
 
     if kind == "module":
         text = item_record["description_text"]
@@ -547,7 +718,7 @@ def read_material(course: str, material: str, *, max_chars: int = 60_000) -> dic
                 }
             )
         result["children"] = children
-        return result
+        return sanitize_untrusted_data(result)
 
     # Backwards-compatible alias for clients written against the 0.x topic-only shape.
     result["topic"] = item_record
@@ -560,8 +731,8 @@ def read_material(course: str, material: str, *, max_chars: int = 60_000) -> dic
             "source_url": item.get("Url"),
             "truncated": len(text) > max_chars,
         }
-        return result
+        return sanitize_untrusted_data(result)
 
     response = client.content_topic_file(org_id, int(item_id))
     result["content"] = _extract_response_content(response, item, max_chars=max_chars)
-    return result
+    return sanitize_untrusted_data(result)

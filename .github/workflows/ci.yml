@@ -13,18 +13,26 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-        python-version: ["3.11", "3.12", "3.13"]
+        python: ["3.11", "3.12", "3.13"]
     runs-on: ${{ matrix.os }}
 
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: ${{ matrix.python }}
       - name: Install
-        run: uv sync --extra dev
+        run: uv sync --frozen --extra dev
+      - name: Lint
+        run: uvx ruff==0.16.7 check .
       - name: Test
-        run: uv run pytest
+        run: uv run --frozen pytest
+      - name: Static security scan
+        if: matrix.os == 'ubuntu-latest' && matrix.python == '3.12'
+        run: uvx bandit==1.9.4 -q -r src --severity-level medium --confidence-level medium
+      - name: Audit runtime dependencies
+        if: matrix.os == 'ubuntu-latest' && matrix.python == '3.12'
+        run: uvx pip-audit==2.10.1 --path .venv/lib/python3.12/site-packages
       - name: Build wheel and sdist
-        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
+        if: matrix.os == 'ubuntu-latest' && matrix.python == '3.12'
         run: uv build

@@ -1,9 +1,21 @@
 from __future__ import annotations
 
-from click.testing import CliRunner
 import pytest
+from click.testing import CliRunner
 
 from ufora_cli import cli as cli_module
+from ufora_cli import course_context, mcp_server
+
+
+def test_logout_clears_only_local_auth_state(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(cli_module, "clear_auth_state", lambda: ["token.json", "browser_profile"])
+
+    result = CliRunner().invoke(cli_module.cli, ["logout"])
+
+    assert result.exit_code == 0, result.output
+    assert "token.json" in result.output
+    assert "browser_profile" in result.output
+    assert "does not revoke" in result.output.lower()
 
 
 def test_mcp_command_forwards_transport(monkeypatch: pytest.MonkeyPatch):
@@ -11,8 +23,6 @@ def test_mcp_command_forwards_transport(monkeypatch: pytest.MonkeyPatch):
 
     def fake_run_server(**kwargs):
         seen.update(kwargs)
-
-    import ufora_cli.mcp_server as mcp_server
 
     monkeypatch.setattr(mcp_server, "run_server", fake_run_server)
     result = CliRunner().invoke(
@@ -30,8 +40,6 @@ def test_mcp_command_forwards_transport(monkeypatch: pytest.MonkeyPatch):
 
 
 def test_mcp_command_surfaces_security_refusal(monkeypatch: pytest.MonkeyPatch):
-    import ufora_cli.mcp_server as mcp_server
-
     def fail(**kwargs):
         raise ValueError("loopback only")
 
@@ -82,6 +90,22 @@ def test_courses_search_surfaces_backend_failure_without_traceback(monkeypatch: 
     assert "Traceback" not in result.output
 
 
+def test_direct_cli_errors_strip_terminal_control_characters(monkeypatch: pytest.MonkeyPatch):
+    from ufora_cli import materials
+
+    monkeypatch.setattr(
+        materials,
+        "get_course_overview",
+        lambda _course: (_ for _ in ()).throw(RuntimeError("Bad\x1b]52;c;clipboard\x07 title")),
+    )
+    result = CliRunner().invoke(cli_module.cli, ["overview", "TEST"])
+
+    assert result.exit_code != 0
+    assert "\x1b" not in result.output
+    assert "\x07" not in result.output
+    assert "Bad]52;c;clipboard title" in result.output
+
+
 def test_courses_search_json_is_machine_readable(monkeypatch: pytest.MonkeyPatch):
     enrollments = [
         {
@@ -98,8 +122,6 @@ def test_courses_search_json_is_machine_readable(monkeypatch: pytest.MonkeyPatch
 
 
 def test_news_without_course_uses_real_course_announcement_aggregator(monkeypatch: pytest.MonkeyPatch):
-    import ufora_cli.course_context as course_context
-
     seen = {}
 
     def fake_get_announcements(course=None, *, since=None):

@@ -1320,14 +1320,16 @@ wheels = [
 
 [[package]]
 name = "ufora-ai"
-version = "1.0.0"
+version = "1.0.1"
 source = { editable = "." }
 dependencies = [
     { name = "click" },
     { name = "d2l-cli", extra = ["login"] },
     { name = "fonttools" },
     { name = "mcp" },
+    { name = "playwright" },
     { name = "pypdf" },
+    { name = "requests" },
 ]
 
 [package.optional-dependencies]
@@ -1338,11 +1340,13 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "click", specifier = ">=8.1,<9" },
+    { name = "click", specifier = "==8.5.0" },
     { name = "d2l-cli", extras = ["login"], specifier = "==0.2.2" },
-    { name = "fonttools", specifier = ">=4.58,<5" },
-    { name = "mcp", specifier = ">=2.2,<3" },
-    { name = "pypdf", specifier = ">=6,<7" },
+    { name = "fonttools", specifier = "==4.65.0" },
+    { name = "mcp", specifier = "==2.2.0" },
+    { name = "playwright", specifier = "==1.62.0" },
+    { name = "pypdf", specifier = "==6.18.1" },
+    { name = "requests", specifier = "==2.34.2" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8,<10" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=5,<8" },
 ]

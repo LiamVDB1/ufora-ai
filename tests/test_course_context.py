@@ -1,9 +1,7 @@
 from __future__ import annotations
 
-from types import SimpleNamespace
-
-from d2l.errors import ForbiddenError
 import pytest
+from d2l.errors import ForbiddenError
 
 from ufora_cli import course_context
 
@@ -97,3 +95,24 @@ def test_announcements_with_course_only_reads_that_course(monkeypatch: pytest.Mo
     assert len(result) == 1
     assert result[0]["Title"] == "Welcome"
     assert result[0]["Course"]["code"] == "TEST_2026"
+
+
+def test_announcements_strip_terminal_control_characters(monkeypatch: pytest.MonkeyPatch):
+    class ControlClient(FakeClient):
+        def news(self, org_id, since=None):
+            return [
+                {
+                    "Title": "Notice\x1b]52;c;clipboard\x07",
+                    "StartDate": "2026-09-13T10:00:00.000Z",
+                    "Body": {"Text": "Safe\x1b[31m text"},
+                }
+            ]
+
+    monkeypatch.setattr(course_context, "_client_and_resolver", lambda: (ControlClient(), FakeResolver()))
+
+    result = course_context.get_announcements("TEST")
+
+    rendered = str(result)
+    assert "\x1b" not in rendered
+    assert "\x07" not in rendered
+    assert result[0]["Title"] == "Notice]52;c;clipboard"

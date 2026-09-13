@@ -1,5 +1,7 @@
 # Ufora AI
 
+[![CI](https://github.com/LiamVDB1/ufora-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/LiamVDB1/ufora-ai/actions/workflows/ci.yml)
+
 > Unofficial, student-built, read-only CLI and MCP integration for **UGent Ufora** (D2L Brightspace).
 
 Ufora AI lets students access their own Ufora data from a terminal or an MCP-compatible AI client without screen scraping. It can list courses, read complete announcements, inspect deadlines and grades, browse course structure, and retrieve the actual text from PDF course materials.
@@ -29,7 +31,7 @@ Students already have the information they need in Ufora, but it is fragmented a
 | Calendar, due and overdue items | ✓ | ✓ |
 | Grades and final grades | ✓ | ✓ |
 | Assignments and quizzes | ✓ | ✓ |
-| Discussions | ✓ | ✓ |
+| Discussion-forum metadata | ✓ | ✓ |
 | Nested course-content tree | ✓ | ✓ |
 | PDF/text material extraction | ✓ | ✓ |
 | File/module download | ✓ | — |
@@ -51,11 +53,13 @@ From a checkout:
 uv tool install .
 ```
 
-After the public repository is available:
+Install the audited release directly from the public repository:
 
 ```bash
-uv tool install git+https://github.com/LiamVDB1/ufora-ai.git
+uv tool install git+https://github.com/LiamVDB1/ufora-ai.git@v1.0.1
 ```
+
+Use `@main` instead only if you deliberately want unreleased development changes.
 
 ### Development install
 
@@ -72,7 +76,9 @@ uv run pytest
 ufora login
 ```
 
-A normal browser window opens. Log into UGent exactly as you normally would. Ufora AI observes the authenticated Brightspace session locally and stores its session material under `~/.d2l/` through the underlying `d2l-cli` authentication flow.
+A normal browser window opens. Log into UGent exactly as you normally would. The underlying `d2l-cli` flow uses a dedicated local browser profile and, after UGent SSO has completed, retrieves a Brightspace web access token from that authenticated browser session. Ufora AI stores the resulting session material under `~/.d2l/` and never receives your UGent password. The public Ufora AI client intentionally ignores ambient `D2L_TOKEN` environment values and cwd `.env` token fallbacks, so authentication cannot silently change based on the directory or shell environment in which you run it.
+
+This is a pragmatic **local** login mechanism, not an OAuth application registered or endorsed by UGent. The student/course-data client only exposes GET/read operations; the separate login flow uses authentication requests to establish the session/token. The captured browser token must be treated as a sensitive credential. See [SECURITY.md](SECURITY.md) for the exact trust boundary.
 
 Then verify the installation:
 
@@ -81,6 +87,14 @@ ufora doctor
 ufora whoami
 ufora courses
 ```
+
+To disconnect this machine and remove the locally cached Brightspace token plus the dedicated Ufora browser profile:
+
+```bash
+ufora logout
+```
+
+`ufora logout` removes Ufora AI's local authentication copies. It does **not** claim to revoke an already-issued Brightspace access token server-side; that token expires according to Brightspace's own lifetime.
 
 Never paste your UGent password, bearer token, or browser cookies into Ufora AI, an issue report, or an AI conversation.
 
@@ -185,7 +199,7 @@ You can customize the loopback port/path:
 ufora-mcp --transport http --port 9000 --path /mcp
 ```
 
-**v1 deliberately refuses non-loopback HTTP binding.** The local version reuses the student's local authenticated Ufora session; exposing that server to a network would create the wrong security model. A future hosted integration should use official institution-approved OAuth instead.
+**v1 deliberately refuses non-loopback HTTP binding.** The local version reuses the student's local authenticated Ufora session; exposing that server to a network would create the wrong security model. Loopback is not per-user authentication, so **prefer stdio** when the client supports it and only use local HTTP on a trusted single-user machine. A future hosted integration should use official institution-approved OAuth instead.
 
 See [`docs/MCP.md`](docs/MCP.md) for the tool/resource catalog and client guidance.
 
@@ -230,9 +244,10 @@ Ufora AI v1 is local-first:
 - authentication state remains on the student's machine under `~/.d2l/`;
 - Ufora requests go directly from the student's machine to `https://ufora.ugent.be`;
 - MCP results go only to the MCP client the student chooses to run;
-- all Ufora operations exposed by this project are read-only.
+- a cloud MCP/AI client may then process or store those results off-device under its own terms, so client choice and data residency are a separate privacy boundary;
+- all student/course-data operations exposed by this project are read-only.
 
-Read [`PRIVACY.md`](PRIVACY.md) and [`SECURITY.md`](SECURITY.md) before deploying or modifying the trust boundary.
+Read [`PRIVACY.md`](PRIVACY.md), [`SECURITY.md`](SECURITY.md), and the dated [`docs/SECURITY-REVIEW.md`](docs/SECURITY-REVIEW.md) before deploying or modifying the trust boundary. Do not assume that an arbitrary personal cloud-AI account is an institutionally approved destination for Ufora data.
 
 ## Architecture
 
@@ -262,9 +277,9 @@ See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 The project is intentionally designed so that UGent can review it without trusting a hosted third party. v1 runs locally, is read-only, contains no telemetry, and is open source.
 
-A future one-click hosted ChatGPT/AI connector would use **official Brightspace OAuth** rather than the local browser-session approach. That hosted version is intentionally outside v1's trust boundary and would only be pursued with institutional cooperation.
+A future one-click hosted ChatGPT/AI connector would need **official Brightspace OAuth plus an UGent-approved AI/data-residency model** rather than the local browser-session approach. That hosted version is intentionally outside v1's trust boundary and would only be pursued with institutional cooperation.
 
-See [`docs/FOR-UGENT.md`](docs/FOR-UGENT.md) for the review/pilot proposal and [`docs/DEMO.md`](docs/DEMO.md) for a short demonstration flow.
+See [`docs/FOR-UGENT.md`](docs/FOR-UGENT.md) for the review/pilot proposal, [`docs/SECURITY-REVIEW.md`](docs/SECURITY-REVIEW.md) for the pre-outreach security review, and [`docs/DEMO.md`](docs/DEMO.md) for a short demonstration flow.
 
 ## Contributing
 

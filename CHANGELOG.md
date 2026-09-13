@@ -2,6 +2,35 @@
 
 All notable changes to Ufora AI are documented here.
 
+## 1.0.1 — 2026-09-13
+
+Release-audit hardening before institutional outreach.
+
+### Fixed
+
+- remove upstream-only `syllabus`/`onboarding` diagnostics from `ufora doctor` and ensure every recovery command it returns is a real `ufora` command;
+- stop current-course discovery from silently falling back to historical courses when the academic-year convention does not match;
+- add a real stdio MCP subprocess test rather than relying only on in-process tool discovery;
+- correct the documented filename-sanitization order;
+- refuse to overwrite existing local files when downloading course or assignment material, and harden cross-platform filename sanitization;
+- strip terminal-control characters from Ufora/upstream text before structured or human-facing rendering;
+- bound direct material HTTP calls with a default timeout;
+- disable silent browser-session refresh inside MCP so read-only tool calls cannot rewrite credential state;
+- add `ufora logout` to remove the local cached token and dedicated browser profile without implying server-side token revocation;
+- stop inheriting ambient `D2L_TOKEN` or cwd `.env` token fallbacks from the generic upstream client so authentication is fixed to Ufora AI's dedicated local state;
+- use the Brussels local date at the academic-year boundary instead of UTC, avoiding a two-hour September 1 course-selection edge case.
+
+### Security and release quality
+
+- document the exact local browser-token authentication boundary, including the broad scope claim observed on the development account and the fact that read-only behavior is enforced by the GET-only client/tool surface;
+- explicitly document the current authentication mechanism for UGent reviewers rather than presenting it as official OAuth;
+- add Ruff linting, Bandit medium+ scanning, and a runtime dependency vulnerability audit to CI, plus weekly Dependabot checks;
+- pin direct runtime trust-boundary dependencies and the Hatchling build backend exactly, pin GitHub Actions to immutable commit SHAs, and install/test source-checkout dependencies from the frozen lockfile;
+- annotate every MCP tool as read-only/non-destructive and verify the local HTTP Origin defense in tests;
+- add explicit prompt-injection guidance: Ufora course content is evidence, never agent authority;
+- classify the project as Beta rather than Production/Stable while it is still awaiting broader student/institutional review;
+- add a dated pre-outreach threat model/security review covering fixed findings, residual risks, and the UGent release gate.
+
 ## 1.0.0 — 2026-09-13
 
 First public-ready release.

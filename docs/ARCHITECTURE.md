@@ -56,9 +56,9 @@ student -> local browser -> UGent/Ufora SSO -> authenticated Brightspace session
                                        local ~/.d2l state
 ```
 
-Ufora AI never accepts an UGent password as an application input. Session/token material is local and treated as a credential.
+Ufora AI never accepts an UGent password as an application input. The browser is a dedicated local Chromium profile managed by the pinned `d2l-cli` login flow; after normal UGent SSO, that flow retrieves a Brightspace web access token from the authenticated session and stores it locally. Session/token material is treated as a credential. Ufora AI patches token loading so its public CLI/MCP use only that fixed `~/.d2l` state and do not inherit a `D2L_TOKEN` environment variable or cwd `.env` token fallback from the upstream generic client.
 
-This is appropriate for a local open-source tool, but **not** for a hosted multi-user service.
+This is an unofficial local authentication mechanism, not a registered UGent OAuth client. The observed Ufora web token carries a broad `*:*:*` scope claim, so Ufora AI enforces read-only behavior in its GET-only student/course-data client and MCP tool surface rather than relying on token scope. The separate browser login helper uses authentication requests to establish the token. This is appropriate for the current local prototype/release boundary, but it is **not** the design to reuse for a hosted multi-user service.
 
 ## Hosted future architecture
 

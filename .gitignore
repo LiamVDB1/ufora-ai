@@ -1,4 +1,9 @@
 .venv/
+.env
+.env.*
+!.env.example
+.d2l/
+token.json
 __pycache__/
 .pytest_cache/
 .coverage

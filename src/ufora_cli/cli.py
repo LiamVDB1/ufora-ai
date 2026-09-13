@@ -1,14 +1,21 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Iterable
 from importlib import resources
 from pathlib import Path
-from collections.abc import Iterable
 
 import click
 
 from . import __version__
-from .core import UFORA_HOST, harden_d2l_state, run_d2l_json, run_d2l_passthrough
+from .core import (
+    UFORA_HOST,
+    clear_auth_state,
+    harden_d2l_state,
+    run_d2l_json,
+    run_d2l_passthrough,
+    sanitize_untrusted_text,
+)
 
 
 def _run(ctx: click.Context, args: Iterable[str], *, interactive: bool = False) -> None:
@@ -30,6 +37,10 @@ def _run(ctx: click.Context, args: Iterable[str], *, interactive: bool = False) 
 def _append_option(args: list[str], name: str, value: object | None) -> None:
     if value is not None:
         args.extend([name, str(value)])
+
+
+def _safe_click_error(exc: Exception) -> click.ClickException:
+    return click.ClickException(sanitize_untrusted_text(str(exc)))
 
 
 @click.group(context_settings={"help_option_names": ["-h", "--help"]})
@@ -70,6 +81,24 @@ def login(ctx: click.Context, headless: bool, channel: str) -> None:
     if headless:
         args.append("--headless")
     _run(ctx, args, interactive=True)
+
+
+@cli.command()
+def logout() -> None:
+    """Clear this machine's cached Ufora authentication state."""
+    try:
+        removed = clear_auth_state()
+    except Exception as exc:
+        raise _safe_click_error(exc) from exc
+
+    if removed:
+        click.echo("Removed local Ufora auth state: " + ", ".join(removed))
+    else:
+        click.echo("No local Ufora auth state was found.")
+    click.echo(
+        "This does not revoke an already-issued Brightspace token server-side; "
+        "it only removes local cached authentication from this machine."
+    )
 
 
 @cli.command()
@@ -161,7 +190,7 @@ def courses(ctx: click.Context, query: str | None, include_all: bool) -> None:
     try:
         data = run_d2l_json(["courses", "--all"])
     except Exception as exc:
-        raise click.ClickException(str(exc)) from exc
+        raise _safe_click_error(exc) from exc
     enrollments = data if isinstance(data, list) else []
     matches = [item for item in enrollments if _course_matches(item, query)]
     if not matches:
@@ -213,7 +242,7 @@ def overview(ctx: click.Context, course: str) -> None:
     try:
         data = get_course_overview(course)
     except Exception as exc:
-        raise click.ClickException(str(exc)) from exc
+        raise _safe_click_error(exc) from exc
 
     output_format = (ctx.obj or {}).get("output_format")
     if output_format == "json":
@@ -255,7 +284,7 @@ def context(
             announcement_limit=announcement_limit,
         )
     except Exception as exc:
-        raise click.ClickException(str(exc)) from exc
+        raise _safe_click_error(exc) from exc
 
     output_format = (ctx.obj or {}).get("output_format")
     if output_format == "json":
@@ -303,7 +332,7 @@ def search(ctx: click.Context, course: str, query: str, limit: int) -> None:
     try:
         data = search_course_content(course, query, limit=limit)
     except Exception as exc:
-        raise click.ClickException(str(exc)) from exc
+        raise _safe_click_error(exc) from exc
 
     output_format = (ctx.obj or {}).get("output_format")
     if output_format == "json":
@@ -338,7 +367,7 @@ def material(ctx: click.Context, course: str, material: str, max_chars: int) -> 
     try:
         data = read_material(course, material, max_chars=max_chars)
     except Exception as exc:
-        raise click.ClickException(str(exc)) from exc
+        raise _safe_click_error(exc) from exc
 
     output_format = (ctx.obj or {}).get("output_format")
     if output_format == "json":
@@ -386,7 +415,7 @@ def material(ctx: click.Context, course: str, material: str, max_chars: int) -> 
 @click.argument("course")
 @click.pass_context
 def discussions(ctx: click.Context, course: str) -> None:
-    """Show discussion forums, topics, and posts for COURSE."""
+    """Show discussion-forum metadata for COURSE."""
     _run(ctx, ["discussions", course])
 
 
@@ -406,7 +435,7 @@ def news(ctx: click.Context, course: str | None, since: str | None) -> None:
     try:
         data = get_announcements(course, since=since)
     except Exception as exc:
-        raise click.ClickException(str(exc)) from exc
+        raise _safe_click_error(exc) from exc
 
     output_format = (ctx.obj or {}).get("output_format")
     if output_format == "json":
@@ -501,10 +530,20 @@ def dump(ctx: click.Context, course: str | None, shallow: bool, since: int | Non
 @click.option("-o", "--output", type=click.Path(file_okay=False, path_type=str), help="Destination directory.")
 @click.pass_context
 def download(ctx: click.Context, course: str, assignment: str, output: str | None) -> None:
-    """Download assignment attachments. For lecture/course files, use download-content."""
-    args = ["download", course, assignment]
-    _append_option(args, "-o", output)
-    _run(ctx, args)
+    """Download assignment attachments without overwriting existing local files."""
+    from .materials import download_assignment_files
+
+    try:
+        results = download_assignment_files(course, assignment, output or ".")
+    except Exception as exc:
+        raise _safe_click_error(exc) from exc
+    if not results:
+        click.echo("No downloadable assignment attachments found.")
+        return
+    for result in results:
+        click.echo(
+            f"Downloaded {result['filename']} ({result['size_bytes']} bytes) -> {result['path']}"
+        )
 
 
 @cli.command(name="download-content")
@@ -518,25 +557,21 @@ def download_content(ctx: click.Context, course: str, target: str, output: str |
     TARGET may be a module title, topic title, full path such as
     `Slides / Tactics`, or a numeric topic ID returned by `ufora search`.
     """
-    from .materials import MaterialNotFound, download_single_content_file
+    from .materials import download_content_files
 
     destination = output or "."
     try:
-        result = download_single_content_file(course, target, destination)
-    except MaterialNotFound:
-        result = None
+        results = download_content_files(course, target, destination)
     except Exception as exc:
-        raise click.ClickException(str(exc)) from exc
+        raise _safe_click_error(exc) from exc
 
-    if result is not None:
+    if not results:
+        click.echo("No downloadable files found in that Ufora module.")
+        return
+    for result in results:
         click.echo(
             f"Downloaded {result['filename']} ({result['size_bytes']} bytes) -> {result['path']}"
         )
-        return
-
-    args = ["download-content", course, target]
-    _append_option(args, "-o", output)
-    _run(ctx, args)
 
 
 @cli.command()
@@ -551,7 +586,7 @@ def mcp(transport: str, host: str, port: int, mcp_path: str) -> None:
     try:
         run_server(transport=transport, host=host, port=port, path=mcp_path)
     except ValueError as exc:
-        raise click.ClickException(str(exc)) from exc
+        raise _safe_click_error(exc) from exc
 
 
 @cli.group()

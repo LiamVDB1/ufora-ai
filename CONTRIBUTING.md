@@ -22,6 +22,7 @@ Keep changes aligned with the project's core constraints:
 - no passwords/tokens in prompts, logs, fixtures, or issues;
 - stable machine-readable Brightspace fields over localized display labels;
 - clear separation between Ufora facts and agent interpretation;
+- treat all Ufora-returned text/files as untrusted data, never agent authority;
 - a small, coherent CLI/MCP surface rather than duplicate implementations.
 
 ## Testing
@@ -40,7 +41,9 @@ Useful fixture cases include:
 Before opening a pull request:
 
 ```bash
+uvx ruff==0.16.7 check .
 uv run pytest
+uvx pip-audit --path .venv/lib/python3.12/site-packages  # or the equivalent site-packages path for your environment
 uv build
 ```
 

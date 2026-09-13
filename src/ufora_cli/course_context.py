@@ -1,15 +1,17 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
-from typing import Any, Callable
+from collections.abc import Callable
+from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from d2l.errors import APIError
 
+from .core import sanitize_untrusted_data, sanitize_untrusted_text
 from .materials import _client_and_resolver, _course_identity, _overview_for
 
 
 def _iso(dt: datetime) -> str:
-    return dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+    return dt.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%S.000Z")
 
 
 def _normalize_since(since: str | None) -> str | None:
@@ -51,7 +53,7 @@ def get_announcements(course: str | None = None, *, since: str | None = None) ->
             results.append(record)
 
     results.sort(key=_announcement_date, reverse=True)
-    return results
+    return sanitize_untrusted_data(results)
 
 
 def _overview_record(raw: dict[str, Any] | None) -> dict[str, Any] | None:
@@ -90,7 +92,7 @@ def get_course_context(
     enrollment = resolver.resolve(course)
     org = enrollment["OrgUnit"]
     org_id = org["Id"]
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     end = now + timedelta(days=days)
     errors: dict[str, dict[str, Any]] = {}
 
@@ -100,7 +102,7 @@ def get_course_context(
         except APIError as exc:
             errors[section] = {
                 "status_code": exc.status_code,
-                "message": str(exc),
+                "message": sanitize_untrusted_text(str(exc)),
             }
             return default
 
@@ -128,20 +130,22 @@ def get_course_context(
         else None
     )
 
-    return {
-        "generated_at": _iso(now),
-        "course": _course_identity(org),
-        "access": enrollment.get("Access"),
-        "overview": _overview_record(overview),
-        "announcements": announcements[:announcement_limit] if isinstance(announcements, list) else [],
-        "grades": grades if isinstance(grades, list) else grades,
-        "assignments": assignments if isinstance(assignments, list) else [],
-        "quizzes": quizzes if isinstance(quizzes, list) else [],
-        "discussion_forums": discussions if isinstance(discussions, list) else [],
-        "calendar_events": calendar_events if isinstance(calendar_events, list) else [],
-        "due": due if isinstance(due, list) else [],
-        "overdue": overdue if isinstance(overdue, list) else [],
-        "updates": updates,
-        "content_toc": content_toc,
-        "section_errors": errors,
-    }
+    return sanitize_untrusted_data(
+        {
+            "generated_at": _iso(now),
+            "course": _course_identity(org),
+            "access": enrollment.get("Access"),
+            "overview": _overview_record(overview),
+            "announcements": announcements[:announcement_limit] if isinstance(announcements, list) else [],
+            "grades": grades,
+            "assignments": assignments if isinstance(assignments, list) else [],
+            "quizzes": quizzes if isinstance(quizzes, list) else [],
+            "discussion_forums": discussions if isinstance(discussions, list) else [],
+            "calendar_events": calendar_events if isinstance(calendar_events, list) else [],
+            "due": due if isinstance(due, list) else [],
+            "overdue": overdue if isinstance(overdue, list) else [],
+            "updates": updates,
+            "content_toc": content_toc,
+            "section_errors": errors,
+        }
+    )

@@ -39,7 +39,7 @@ UGent can leave old course offerings marked `IsActive=true` and `CanAccess=true`
 
 Ufora AI therefore treats offering codes ending in `_YYYY` as the academic-year start year and uses the current year by default. `ufora courses --all` remains available for history.
 
-If UGent changes this code convention, the compatibility test suite should be updated based on observed API behavior rather than silently guessing.
+If no offerings match the current academic-year convention, Ufora AI deliberately returns no current courses rather than silently falling back to every historical offering. That fail-closed behavior protects cross-course calendar/deadline queries from accidentally spanning years of archived shells. If UGent changes the code convention, the compatibility rule should be updated from observed API behavior rather than guessed around with a broad fallback.
 
 ## Administrative/evaluation offerings
 

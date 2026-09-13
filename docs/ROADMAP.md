@@ -2,7 +2,7 @@
 
 ## v1 — local open-source integration
 
-Status: target release `1.0.0`.
+Status: released; current audit-hardened release line starts at `1.0.1`.
 
 - read-only CLI;
 - stdio MCP;
