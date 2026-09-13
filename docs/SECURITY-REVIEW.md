@@ -1,12 +1,12 @@
 # Security review — 2026-09-13
 
-This document records the pre-UGent security review of **Ufora AI 1.0.1**. It is intended to make the project's trust boundary, verified controls, fixed defects, and remaining institutional questions explicit rather than imply that an unofficial student integration is risk-free.
+This document records the pre-UGent security review of **Ufora AI 1.0.2**. It is intended to make the project's trust boundary, verified controls, fixed defects, and remaining institutional questions explicit rather than imply that an unofficial student integration is risk-free.
 
 ## Review conclusion
 
-**Suitable to present to UGent for technical/security review and a limited voluntary pilot after 1.0.1 is released.**
+**Suitable to present to UGent for technical/security review and a limited voluntary pilot after 1.0.2 is released.**
 
-It should **not** be presented as institutionally approved, production-grade for university-wide deployment, or as using an official least-privilege OAuth integration. Two institutional questions remain open. First, authentication: v1 locally captures a Brightspace web bearer token after normal UGent SSO. On the development account the token carried the broad scope claim `*:*:*`. Ufora AI's student/course-data client remains read-only because its reviewed API methods expose GET/read calls only; the separate login helper uses authentication requests to establish the token. Token compromise could still have impact beyond the application's intended read-only data surface. Second, AI-client data handling: Ufora contains personal/confidential student data, while UGent's current student IT guidance says not to store confidential information (including personal data) on cloud services whose data storage is outside the EEA. A broad rollout to arbitrary cloud AI accounts therefore needs an explicit UGent-approved data-handling/residency policy.
+It should **not** be presented as institutionally approved, production-grade for university-wide deployment, or as using an official least-privilege OAuth integration. Three institutional questions remain open. First, authentication: v1 locally captures a Brightspace web bearer token after normal UGent SSO. On the development account the token carried the broad scope claim `*:*:*`. Ufora AI's student/course-data client remains read-only because its reviewed API methods expose GET/read calls only; the separate login helper uses authentication requests to establish the token. Token compromise could still have impact beyond the application's intended read-only data surface. Second, AI-client data handling: Ufora contains personal/confidential student data, while UGent's current student IT guidance says not to store confidential information (including personal data) on cloud services whose data storage is outside the EEA. Third, course-material rights: UGent's current GenAI guidance says course materials are not automatically permitted to be uploaded to AI systems because they may be copyrighted and may not belong to the student. A broad rollout to arbitrary cloud AI accounts therefore needs explicit UGent-approved data-handling/residency **and course-material permission** policies.
 
 The recommended UGent discussion is therefore not “is this perfectly secure?” but:
 
@@ -14,7 +14,8 @@ The recommended UGent discussion is therefore not “is this perfectly secure?�
 2. is the current local browser-session token mechanism acceptable for a pilot;
 3. if not, can UGent register a least-privilege OAuth client for the project;
 4. which MCP/AI client deployments UGent considers acceptable for student data, including EEA data-residency requirements;
-5. whether a UGent-managed ChatGPT Edu/other approved AI environment should be the target for any institutionally promoted cloud-AI workflow instead of arbitrary personal accounts.
+5. under what conditions student-accessible course material may be sent to an AI system;
+6. whether a UGent-managed ChatGPT Edu/other approved AI environment should be the target for any institutionally promoted cloud-AI workflow instead of arbitrary personal accounts.
 
 ## Scope
 
@@ -92,6 +93,7 @@ Ufora AI GET-only client
 | SR-10 | Secret/release-package leakage | **High if present** | **No leak found in reviewed history/artifacts** |
 | SR-11 | Generic upstream auth could inherit a valid `D2L_TOKEN` from the process environment or cwd `.env`, making the effective account depend on ambient state | **Low–Medium auth-integrity risk** | **Fixed in 1.0.1** |
 | SR-12 | Cloud AI/MCP clients may store Ufora personal/confidential data outside the EEA or otherwise outside an UGent-approved data-handling boundary | **High institutional/privacy priority** | **Open — deployment policy/client choice required** |
+| SR-13 | Course materials may be copyrighted/not owned by the student; sending them to an AI client is not automatically permitted by UGent policy | **High institutional/legal priority** | **Open — permission/approved-AI model required** |
 
 ### SR-01 — authentication trust boundary
 
@@ -189,7 +191,7 @@ Residual risk: a highly compressed or pathological PDF within the size limit can
 
 ### SR-10 — secrets and release artifacts
 
-The review found no high-confidence GitHub/OpenAI-style tokens, JWTs, private keys, `.d2l` state, or token files in the reviewed Git history or built 1.0.1 artifacts. `.gitignore` now explicitly excludes `.env*` (except an intentional example), `.d2l/`, and `token.json` in addition to normal build/virtualenv files.
+The review found no high-confidence GitHub/OpenAI-style tokens, JWTs, private keys, `.d2l` state, or token files in the reviewed Git history or built 1.0.2 artifacts. `.gitignore` now explicitly excludes `.env*` (except an intentional example), `.d2l/`, and `token.json` in addition to normal build/virtualenv files.
 
 ### SR-11 — ambient credential inheritance
 
@@ -207,10 +209,26 @@ For ChatGPT specifically, OpenAI currently documents European data residency for
 
 Institutional recommendation: do not pitch v1 as “connect your personal ChatGPT account to all of Ufora.” Pitch the open-source local CLI/MCP first, and ask UGent which AI environments/data categories they are willing to approve. If UGent wants a ChatGPT workflow, a managed ChatGPT Edu/approved environment with appropriate European residency and governance is a much cleaner target than arbitrary personal accounts.
 
+### SR-13 — course-material permission / copyright boundary
+
+UGent's current GenAI guidance says course materials are **not automatically permitted to be uploaded to an AI system**. Course materials may be copyrighted and may not belong to the student; UGent says they should only be uploaded when the student has permission or when the lecturer has made them available through an approved AI system.
+
+This matters directly to Ufora AI because `read_course_material` can return slides, PDFs, syllabi, and substantial module text to an MCP client. If that client is cloud-hosted, the material leaves the student's device for AI processing even though Ufora AI itself has no backend. Local retrieval is not itself permission to redistribute or disclose the material to another service.
+
+Controls and policy:
+
+- Ufora AI never uploads course files on its own; disclosure occurs only when the chosen MCP/AI client requests and receives tool output;
+- the bundled agent guidance requires data minimization and treats cloud transmission of full course material as permission-sensitive;
+- a local CLI or fully local AI client avoids this third-party disclosure boundary, although ordinary copyright/use restrictions still apply;
+- an institutionally promoted cloud-AI workflow should define which materials may be transmitted and how lecturer/rightsholder approval is represented.
+
+Residual risk is governance-dependent and cannot be solved by code alone. For UGent review, this should be a first-class question alongside OAuth and data residency rather than buried in a general disclaimer.
+
 References used for this review:
 
 - UGent student security guidance: <https://helpdesk.ugent.be/security/veilig-werken-studenten.php>
 - UGent Ufora privacy statement: <https://www.ugent.be/student/en/ict/educational-tools/ufora/privacystatement>
+- UGent student GenAI guidance: <https://www.ugent.be/student/en/study-support/genai>
 - OpenAI ChatGPT data residency documentation: <https://help.openai.com/en/articles/9903489-data-residency-for-chatgpt>
 
 ## Positive controls verified
@@ -247,11 +265,12 @@ One Starlette/AnyIO deprecation warning appears in the HTTP test dependency stac
 
 ### Required
 
-- release these fixes as **1.0.1** so the public code matches the security claims;
+- release the final reviewed state as **1.0.2** so the public code and institutional-policy claims match;
 - link UGent reviewers directly to this document, `SECURITY.md`, `PRIVACY.md`, and `docs/FOR-UGENT.md`;
 - describe the project as a **candidate for review/pilot**, not an approved service;
 - explicitly ask UGent whether the current local token mechanism is acceptable or whether they want a registered OAuth client;
-- explicitly ask which AI clients/data-residency configurations are acceptable for Ufora personal/confidential data; do not assume personal cloud-AI accounts are approved.
+- explicitly ask which AI clients/data-residency configurations are acceptable for Ufora personal/confidential data; do not assume personal cloud-AI accounts are approved;
+- explicitly ask under what conditions course materials may be passed to AI clients and how lecturer/rightsholder approval should be represented.
 
 ### Strongly recommended repository governance
 
@@ -262,4 +281,4 @@ One Starlette/AnyIO deprecation warning appears in the HTTP test dependency stac
 
 ## Release gate
 
-The code-level 1.0.1 hardening passes the current review gate. The **remaining blockers for an institutional “secure/endorsed” claim are governance decisions around authentication and downstream AI-client/data-residency handling, not a known unpatched remote-code-execution or credential-exfiltration bug in Ufora AI itself**.
+The code-level hardening through 1.0.2 passes the current review gate. The **remaining blockers for an institutional “secure/endorsed” claim are governance decisions around authentication, downstream AI-client/data-residency handling, and course-material permissions—not a known unpatched remote-code-execution or credential-exfiltration bug in Ufora AI itself**.

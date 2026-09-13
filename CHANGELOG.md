@@ -2,6 +2,17 @@
 
 All notable changes to Ufora AI are documented here.
 
+## 1.0.2 — 2026-09-13
+
+Institutional-policy hardening discovered during the final UGent pre-outreach review.
+
+### Changed
+
+- document UGent's current rule that course material is not automatically permitted to be uploaded to an AI system;
+- make the MCP server/agent guidance treat cloud transmission of full course material as permission-sensitive rather than assuming Ufora access grants redistribution rights;
+- add course-material permission/copyright as a first-class institutional review question alongside OAuth and data residency;
+- tighten the README, privacy, MCP, security, and UGent-review documentation so a future cloud-AI pitch cannot be mistaken for blanket permission to send all Ufora content to arbitrary AI providers.
+
 ## 1.0.1 — 2026-09-13
 
 Release-audit hardening before institutional outreach.

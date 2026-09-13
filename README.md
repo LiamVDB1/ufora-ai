@@ -56,7 +56,7 @@ uv tool install .
 Install the audited release directly from the public repository:
 
 ```bash
-uv tool install git+https://github.com/LiamVDB1/ufora-ai.git@v1.0.1
+uv tool install git+https://github.com/LiamVDB1/ufora-ai.git@v1.0.2
 ```
 
 Use `@main` instead only if you deliberately want unreleased development changes.
@@ -245,9 +245,10 @@ Ufora AI v1 is local-first:
 - Ufora requests go directly from the student's machine to `https://ufora.ugent.be`;
 - MCP results go only to the MCP client the student chooses to run;
 - a cloud MCP/AI client may then process or store those results off-device under its own terms, so client choice and data residency are a separate privacy boundary;
+- UGent's current GenAI guidance says course materials are **not automatically permitted to be uploaded to an AI system**; permission or an approved AI setup may be required before sending retrieved course material to a cloud AI client;
 - all student/course-data operations exposed by this project are read-only.
 
-Read [`PRIVACY.md`](PRIVACY.md), [`SECURITY.md`](SECURITY.md), and the dated [`docs/SECURITY-REVIEW.md`](docs/SECURITY-REVIEW.md) before deploying or modifying the trust boundary. Do not assume that an arbitrary personal cloud-AI account is an institutionally approved destination for Ufora data.
+Read [`PRIVACY.md`](PRIVACY.md), [`SECURITY.md`](SECURITY.md), and the dated [`docs/SECURITY-REVIEW.md`](docs/SECURITY-REVIEW.md) before deploying or modifying the trust boundary. Do not assume that an arbitrary personal cloud-AI account is an institutionally approved destination for Ufora data or course material.
 
 ## Architecture
 
@@ -277,7 +278,7 @@ See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 The project is intentionally designed so that UGent can review it without trusting a hosted third party. v1 runs locally, is read-only, contains no telemetry, and is open source.
 
-A future one-click hosted ChatGPT/AI connector would need **official Brightspace OAuth plus an UGent-approved AI/data-residency model** rather than the local browser-session approach. That hosted version is intentionally outside v1's trust boundary and would only be pursued with institutional cooperation.
+A future one-click hosted ChatGPT/AI connector would need **official Brightspace OAuth plus an UGent-approved AI/data-residency and course-material permission model** rather than the local browser-session approach. That hosted version is intentionally outside v1's trust boundary and would only be pursued with institutional cooperation.
 
 See [`docs/FOR-UGENT.md`](docs/FOR-UGENT.md) for the review/pilot proposal, [`docs/SECURITY-REVIEW.md`](docs/SECURITY-REVIEW.md) for the pre-outreach security review, and [`docs/DEMO.md`](docs/DEMO.md) for a short demonstration flow.
 

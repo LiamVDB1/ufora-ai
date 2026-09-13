@@ -33,7 +33,9 @@ UGent's published [Ufora privacy statement](https://www.ugent.be/student/en/ict/
 
 This downstream client boundary needs an explicit institutional decision. UGent's current [student guidance for working safely with IT](https://helpdesk.ugent.be/security/veilig-werken-studenten.php) says not to store confidential information (including personal data) on cloud services with data storage outside the EEA. A general recommendation to connect Ufora AI to arbitrary personal cloud-AI accounts would therefore be premature. For ChatGPT specifically, OpenAI currently documents European data residency for eligible Enterprise/Edu workspaces and eligible API customers, not as a blanket guarantee for personal consumer accounts. If UGent wants a ChatGPT workflow, a managed/approved environment with the required residency and governance is the cleaner target.
 
-UGent's [ICT acceptable-use policy](https://helpdesk.ugent.be/account/en/REG000157EN.pdf) permits legitimate education/research/service activities, while also prohibiting violations of system security/terms and deliberate disclosure of confidential information to unauthorized recipients. Ufora AI does not claim that those general rules constitute approval of this integration. Before broad institutional promotion, the intended API/authentication use, acceptable AI clients, data-residency expectations, and recommended data-handling patterns should be confirmed with the Ufora/ICT/privacy owners.
+There is also a separate **course-material permission/copyright boundary**. UGent's current [student GenAI guidance](https://www.ugent.be/student/en/study-support/genai) says course materials are not automatically permitted to be uploaded to an AI system: they may be copyrighted and may not belong to the student, so permission or lecturer-provided access through an approved AI system may be required. An MCP client receiving a Ufora PDF/slide/module body for cloud-model processing is materially the same data-disclosure question. The local software therefore should not be interpreted as granting permission to send all Ufora material to arbitrary AI providers.
+
+UGent's [ICT acceptable-use policy](https://helpdesk.ugent.be/account/en/REG000157EN.pdf) permits legitimate education/research/service activities, while also prohibiting violations of system security/terms and deliberate disclosure of confidential information to unauthorized recipients. Ufora AI does not claim that those general rules constitute approval of this integration. Before broad institutional promotion, the intended API/authentication use, acceptable AI clients, data-residency expectations, course-material permission model, and recommended data-handling patterns should be confirmed with the Ufora/ICT/privacy/education owners.
 
 ## Why MCP
 
@@ -83,7 +85,7 @@ A low-risk way to evaluate the project would be:
 1. technical/security review of the public repository, pinned authentication dependency, and `docs/SECURITY-REVIEW.md`;
 2. verify that the project only consumes permitted student-visible read surfaces;
 3. confirm whether the local browser-token mechanism is acceptable for a pilot;
-4. define which AI/MCP clients and data-residency configurations may receive Ufora data, and which data categories (for example grades) need stricter handling;
+4. define which AI/MCP clients and data-residency configurations may receive Ufora data, which data categories (for example grades) need stricter handling, and when course materials may be sent to an AI system;
 5. small voluntary student pilot of the local v1 installation, preferably starting with the CLI/local data path before any broad cloud-AI recommendation;
 6. collect compatibility/onboarding feedback;
 7. decide whether UGent wants to link to, recommend, co-maintain, or simply acknowledge the project.
@@ -104,6 +106,7 @@ That future version would require a separate privacy/security review because ser
 - Is there a preferred contact/owner for Ufora extensibility/API questions?
 - Would UGent be interested in reviewing or piloting the project with students?
 - Which local or cloud AI/MCP clients and data-residency configurations would UGent consider acceptable for Ufora data?
+- Under what conditions may student-accessible course materials be passed from Ufora to an AI system, and can UGent/lecturers provide an approved permission model for that workflow?
 - If ChatGPT is a desired client, would UGent prefer a managed ChatGPT Edu/approved environment rather than personal accounts?
 - If a hosted version became desirable, what read-only OAuth scopes and registration process would UGent prefer?
 - Are there branding/disclaimer requirements UGent would like an unofficial integration to follow?

@@ -111,6 +111,8 @@ search_course_content(course, query)
     -> answer from the returned material
 ```
 
+If the MCP client sends tool output to a cloud AI provider, **do not treat Ufora access as permission to transmit course material**. UGent's current GenAI guidance says course material is not automatically permitted to be uploaded to an AI system; use `read_course_material` only when the user has the required permission or the material is being processed through an approved AI setup. A local CLI or fully local AI client avoids that third-party disclosure boundary.
+
 Use `get_course_content(course, detailed=true)` when the full nested hierarchy is itself useful. Course Overview is a separate Brightspace surface and must not be inferred from the TOC.
 
 For planning questions:
@@ -150,4 +152,4 @@ This clears local authentication copies only; it does not claim to revoke an alr
 
 ## Hosted/public clients
 
-v1 is not a hosted multi-user connector. Do not tunnel or expose its local HTTP endpoint to the public internet. A remote ChatGPT-style connector should use a separate OAuth-backed service with institutional approval and its own authentication/authorization layer.
+v1 is not a hosted multi-user connector. Do not tunnel or expose its local HTTP endpoint to the public internet. A remote ChatGPT-style connector should use a separate OAuth-backed service with institutional approval, its own authentication/authorization layer, an approved data-residency model, and a clear policy for when course materials may be sent to the AI service.

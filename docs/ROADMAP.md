@@ -2,7 +2,7 @@
 
 ## v1 — local open-source integration
 
-Status: released; current audit-hardened release line starts at `1.0.1`.
+Status: released; current pre-UGent audit-hardened release is `1.0.2`.
 
 - read-only CLI;
 - stdio MCP;

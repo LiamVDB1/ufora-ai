@@ -32,6 +32,8 @@ An MCP client can receive whatever data you ask Ufora AI to return. The privacy 
 
 UGent's current student IT-security guidance says not to store confidential information (including personal data) on cloud services whose data storage is outside the EEA. Ufora data can contain personal/confidential information, so **do not assume that an arbitrary personal cloud-AI account is an institutionally acceptable destination for Ufora data**. A local AI client avoids that cloud-storage boundary; an institutionally promoted cloud-AI setup should be reviewed by UGent for data residency, retention, access, and contractual terms.
 
+UGent's current GenAI guidance adds a separate copyright/permission boundary: course materials are not automatically permitted to be uploaded to an AI system because they may be copyrighted and may not belong to the student. Permission from the rightsholder/lecturer or use through an approved AI setup may therefore be required before an MCP client sends retrieved slides, PDFs, syllabi, or other course material to a cloud AI provider. Using Ufora AI locally does not by itself grant that permission.
+
 For ChatGPT specifically, European data residency is currently an organizational feature for eligible Enterprise/Edu workspaces (and eligible API customers), not something this project can guarantee for a student's personal account. The appropriate ChatGPT deployment for an UGent-backed workflow should therefore be decided with UGent rather than inferred by Ufora AI.
 
 Ufora AI does not silently send your Ufora data to an AI provider. The MCP client decides when to call tools and how to use their output.

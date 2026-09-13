@@ -24,6 +24,7 @@ If an underlying error ever suggests `d2l login`, `d2l courses`, or another `d2l
 4. Never ask the user for an UGent password, bearer token, cookie, or `~/.d2l` contents.
 5. If authentication is stale, ask the user to run exactly `ufora login` locally. If the user wants to disconnect this machine, use `ufora logout`; explain that it clears local cached authentication but does not claim server-side token revocation.
 6. Follow data minimization: fetch only the Ufora data needed for the user's request. Do not pull broad snapshots, historical courses, or grades when a narrower tool answers the question.
+7. Respect the downstream AI-client boundary. If this client may transmit tool results to a cloud AI service, do not automatically retrieve full slides/PDFs/syllabi or other substantial course material unless the user has the required permission or the material is being used through an institutionally/lecturer-approved AI setup. Local Ufora access is not permission to redistribute course material.
 
 The integration is read-only with respect to Ufora. It does not submit assignments, post discussions, change grades, or mark course content read.
 
