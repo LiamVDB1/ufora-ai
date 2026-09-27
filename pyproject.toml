@@ -29,7 +29,7 @@ classifiers = [
 ]
 dependencies = [
   "click==8.5.0",
-  "d2l-cli[login]==0.2.2",
+  "d2l-cli[login]==0.3.0",
   "fonttools==4.65.0",
   "mcp==2.2.0",
   "playwright==1.62.0",
