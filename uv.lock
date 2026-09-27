@@ -487,15 +487,15 @@ wheels = [
 
 [[package]]
 name = "d2l-cli"
-version = "0.2.2"
+version = "0.3.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "click" },
     { name = "requests" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/1e/9e/b88f4dd49986378f9b4fb7e881da2d564ae87fd8d6c8bbd0068abba21fa8/d2l_cli-0.2.2.tar.gz", hash = "sha256:c9513fdae66df2256bb8e17659fd3edf731cbe08825bcd1b48ff2ed99530b899", size = 50988, upload-time = "2026-08-27T00:21:03.087Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/c1/08/d379f3f6291447446ec61f0d0f97a14aadff16f02cd9a49d22b122ea875e/d2l_cli-0.3.0.tar.gz", hash = "sha256:62a01011b83fe054d0e6250a67347220f1c9b3a9e0103c8394e41cfe59bf0f15", size = 51405, upload-time = "2026-09-24T03:05:06.186Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/1f/a4/3cc958cd3c2eb916749d542f51c29001a8688887eba576c43d07fdbe68fb/d2l_cli-0.2.2-py3-none-any.whl", hash = "sha256:26ab213e974319de03548f9f1003995db3a5d1ccc27c093d934d53754417cd58", size = 53225, upload-time = "2026-08-27T00:21:01.753Z" },
+    { url = "https://files.pythonhosted.org/packages/8c/74/1ae584375491198aba0514b9b7d5e2d4778c1a4049b8adae825a6b7b2815/d2l_cli-0.3.0-py3-none-any.whl", hash = "sha256:53546b40575d27378adfee36b76fc22859222d21ebf50455dc53990e4e91299f", size = 53373, upload-time = "2026-09-24T03:05:04.704Z" },
 ]
 
 [package.optional-dependencies]
@@ -659,8 +659,8 @@ name = "httpcore2"
 version = "2.12.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "h11", marker = "python_full_version < '3.12' or python_full_version >= '3.14' or sys_platform != 'emscripten'" },
-    { name = "truststore", marker = "python_full_version < '3.12' or python_full_version >= '3.14' or sys_platform != 'emscripten'" },
+    { name = "h11" },
+    { name = "truststore" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/be/ad/f4f0e57345f1870f3e8cb624e058d7eca6e5a27d33bcc3311d9b618734cd/httpcore2-2.12.0.tar.gz", hash = "sha256:9293522bba0aa7c4c8e9e3f040c16575bd8868e155a77fa30c7a9085a5eae648", size = 67548, upload-time = "2026-08-18T13:22:08.211Z" }
 wheels = [
@@ -1341,14 +1341,14 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "click", specifier = "==8.5.0" },
-    { name = "d2l-cli", extras = ["login"], specifier = "==0.2.2" },
+    { name = "d2l-cli", extras = ["login"], specifier = "==0.3.0" },
     { name = "fonttools", specifier = "==4.65.0" },
     { name = "mcp", specifier = "==2.2.0" },
     { name = "playwright", specifier = "==1.62.0" },
     { name = "pypdf", specifier = "==6.18.1" },
-    { name = "requests", specifier = "==2.34.2" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8,<10" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=5,<8" },
+    { name = "requests", specifier = "==2.34.2" },
 ]
 provides-extras = ["dev"]
 
@@ -1366,8 +1366,8 @@ name = "uvicorn"
 version = "0.52.4"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "click", marker = "python_full_version < '3.12' or python_full_version >= '3.14' or sys_platform != 'emscripten'" },
-    { name = "h11", marker = "python_full_version < '3.12' or python_full_version >= '3.14' or sys_platform != 'emscripten'" },
+    { name = "click" },
+    { name = "h11" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/f2/0f/3f86e61397dd33bf2ccf28188c40db6a740658aeebbbf6e7dbc101a1f487/uvicorn-0.52.4.tar.gz", hash = "sha256:73acfee47a0b133c5de13d219492d62d8a31e935f4fe6e41a232451a15379f86", size = 100627, upload-time = "2026-08-19T06:27:41.821Z" }
 wheels = [
