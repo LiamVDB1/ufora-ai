@@ -2,6 +2,26 @@
 
 All notable changes to Ufora AI are documented here.
 
+## 1.1.0 — 2026-09-28
+
+Stay signed in instead of re-running `ufora login` every hour.
+
+### Fixed
+
+- silent token renewal never worked: Chromium discards session cookies when the headless browser closes, and Ufora's session plus the UGent/Microsoft SSO sessions are exactly such cookies. The sign-in-chain cookies are now saved to `~/.d2l/session.json` (0600) and restored on every browser launch;
+- renewal no longer captures a token that expires within 10 minutes;
+- concurrent renewals (timer and CLI) are serialized with a profile lock, and stale Chromium profile locks from a crashed browser are cleared first.
+
+### Added
+
+- `ufora refresh` to renew the token explicitly, plus a systemd user timer in `contrib/systemd/` that keeps the token and Ufora session fresh for MCP use;
+- `ufora login` now reuses a live local desktop session when the terminal has no display, and refuses clearly over SSH without a forwarded display.
+
+### Changed
+
+- upgrade `d2l-cli` to 0.3.0;
+- `ufora logout` also removes the saved sign-in cookies.
+
 ## 1.0.2 — 2026-09-13
 
 Institutional-policy hardening discovered during the final UGent pre-outreach review.

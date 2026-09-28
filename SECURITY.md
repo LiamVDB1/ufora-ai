@@ -14,8 +14,9 @@ Ufora AI v1 is designed for a **single local user**:
 - The CLI talks directly to UGent Ufora over HTTPS.
 - MCP over stdio inherits the local user's permissions.
 - Streamable HTTP is restricted to loopback addresses by the application.
-- MCP disables the upstream client's silent browser-session refresh; an expired MCP session requires the student to run `ufora login` explicitly, so tools marked read-only do not rewrite local credential state as a side effect.
-- `ufora logout` removes the local cached token and dedicated browser profile; it does not claim to revoke an already-issued Brightspace token server-side.
+- MCP disables the upstream client's silent browser-session refresh, so tools marked read-only do not rewrite local credential state as a side effect. Renewal happens only through the CLI or the explicit `ufora refresh` command (optionally on a local timer).
+- To make headless renewal work, the sign-in-chain cookies (`*.ugent.be`, `*.microsoftonline.com` only) are saved to `~/.d2l/session.json` with mode 0600 and restored on the next browser launch. They are as sensitive as the browser profile and the token.
+- `ufora logout` removes the local cached token, the saved sign-in cookies, and the dedicated browser profile; it does not claim to revoke an already-issued Brightspace token or SSO session server-side.
 - There is no hosted Ufora AI account, token database, telemetry service, or credential proxy in v1.
 - Student/course-data operations are read-only at the application layer: the underlying Brightspace data client exposes GET/read methods only. The separate browser login flow necessarily uses authentication requests to obtain a token; it is not a course-data write surface.
 

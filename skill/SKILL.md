@@ -22,7 +22,7 @@ If an underlying error ever suggests `d2l login`, `d2l courses`, or another `d2l
 2. Fall back to the local `ufora` CLI.
 3. For CLI automation, prefer JSON output: global flags come **before** the subcommand, e.g. `ufora --json news C003783A`, not `ufora news --json ...`.
 4. Never ask the user for an UGent password, bearer token, cookie, or `~/.d2l` contents.
-5. If authentication is stale, ask the user to run exactly `ufora login` locally. If the user wants to disconnect this machine, use `ufora logout`; explain that it clears local cached authentication but does not claim server-side token revocation.
+5. If authentication is stale, first run `ufora refresh` (it renews the token from the saved sign-in without a visible browser). Only if that fails, ask the user to run exactly `ufora login` locally. If the user wants to disconnect this machine, use `ufora logout`; explain that it clears local cached authentication but does not claim server-side token revocation.
 6. Follow data minimization: fetch only the Ufora data needed for the user's request. Do not pull broad snapshots, historical courses, or grades when a narrower tool answers the question.
 7. Respect the downstream AI-client boundary. If this client may transmit tool results to a cloud AI service, do not automatically retrieve full slides/PDFs/syllabi or other substantial course material unless the user has the required permission or the material is being used through an institutionally/lecturer-approved AI setup. Local Ufora access is not permission to redistribute course material.
 
@@ -173,7 +173,7 @@ Quote course/material/search names containing spaces or shell-significant charac
 
 ## Failure handling
 
-- Authentication/session error → tell the user to run `ufora login`.
+- Authentication/session error → run `ufora refresh`; if it still fails, tell the user to run `ufora login`.
 - Unexpected zero courses → run/inspect `doctor()` and version; v1.0.0+ contains the UGent compatibility fixes.
 - One empty current course → likely legitimate early-semester state; verify another known-populated/historical course before diagnosing the integration.
 - Cross-course calendar/due failure → use current courses; never construct the query from `courses --all`.

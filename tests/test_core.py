@@ -72,9 +72,12 @@ def test_clear_auth_state_removes_cached_token_and_browser_profile(
     (browser_profile / "Cookies").write_text("session", encoding="utf-8")
     (state_dir / "token.json").write_text('{"token":"secret"}', encoding="utf-8")
 
+    (state_dir / "session.json").write_text('{"cookies":[]}', encoding="utf-8")
+
     removed = core.clear_auth_state()
 
-    assert removed == ["token.json", "browser_profile"]
+    assert removed == ["token.json", "session.json", "browser_profile"]
+    assert not (state_dir / "session.json").exists()
     assert not (state_dir / "token.json").exists()
     assert not browser_profile.exists()
     assert state_dir.exists()
@@ -180,3 +183,54 @@ def test_passthrough_translates_child_output(monkeypatch: pytest.MonkeyPatch, ca
     assert "Ufora token expired" in captured.err
     assert "\x1b" not in captured.out + captured.err
     assert "\x07" not in captured.out + captured.err
+
+
+def test_is_ssh_session_reads_ssh_env() -> None:
+    assert core.is_ssh_session({"SSH_CONNECTION": "1.2.3.4 1 5.6.7.8 22"}) is True
+    assert core.is_ssh_session({"HOME": "/home/liam"}) is False
+
+
+def test_inherit_graphical_session_keeps_existing_display() -> None:
+    env = core.inherit_graphical_session(
+        {"HOME": "/home/liam", "DISPLAY": ":1"},
+        discovered={"DISPLAY": ":2", "WAYLAND_DISPLAY": "wayland-0"},
+    )
+
+    assert env["DISPLAY"] == ":1"
+    assert "WAYLAND_DISPLAY" not in env
+
+
+def test_inherit_graphical_session_copies_discovered_display() -> None:
+    env = core.inherit_graphical_session(
+        {"HOME": "/home/liam"},
+        discovered={
+            "DISPLAY": ":2",
+            "WAYLAND_DISPLAY": "wayland-0",
+            "XAUTHORITY": "/run/user/1000/.mutter-Xwaylandauth.abc",
+        },
+    )
+
+    assert env["DISPLAY"] == ":2"
+    assert env["WAYLAND_DISPLAY"] == "wayland-0"
+    assert env["XAUTHORITY"].endswith(".abc")
+
+
+def test_clear_stale_chromium_locks_removes_dead_pid_lock(tmp_path) -> None:
+    profile = tmp_path / "browser_profile"
+    profile.mkdir()
+    (profile / "SingletonLock").symlink_to("macserver-99999999")
+    (profile / "SingletonCookie").symlink_to("stale")
+
+    assert core.clear_stale_chromium_locks(profile) is True
+    assert not (profile / "SingletonLock").exists()
+    assert not (profile / "SingletonCookie").exists()
+
+
+def test_clear_stale_chromium_locks_keeps_live_pid_lock(tmp_path) -> None:
+    profile = tmp_path / "browser_profile"
+    profile.mkdir()
+    live_pid = os.getpid()
+    (profile / "SingletonLock").symlink_to(f"macserver-{live_pid}")
+
+    assert core.clear_stale_chromium_locks(profile) is False
+    assert (profile / "SingletonLock").is_symlink()

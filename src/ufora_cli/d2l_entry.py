@@ -22,7 +22,7 @@ from d2l import auth as d2l_auth
 from d2l.errors import D2LError, TokenExpiredError, TokenNotFoundError
 from d2l.resolver import CourseResolver
 
-from . import __version__
+from . import __version__, session
 from .core import _translate_upstream_text
 
 
@@ -60,6 +60,24 @@ def _patch_auth_sources() -> None:
     loaded_cli = sys.modules.get("d2l.cli")
     if loaded_cli is not None:
         loaded_cli.load_token = _load_saved_token_only
+
+
+def _patch_session() -> None:
+    """Carry the SSO session across headless launches and never capture near-expiry tokens."""
+    auth_cmd = importlib.import_module("d2l.commands.auth_cmd")
+    auth_cmd._launch_context = session.wrap_launch_context(auth_cmd._launch_context)
+    auth_cmd._parse_token = session.require_min_lifetime(auth_cmd._parse_token)
+
+
+@click.command(name="refresh")
+def refresh() -> None:
+    """Renew the token from the saved sign-in without opening a visible browser."""
+    auth_cmd = importlib.import_module("d2l.commands.auth_cmd")
+    if not auth_cmd._capture_and_save(headless=True, channel="auto", quiet=True):
+        click.echo("Your Ufora session needs a fresh sign-in. Run: ufora login", err=True)
+        raise SystemExit(1)
+    info = d2l_auth.token_info()
+    click.echo(f"Ufora token renewed; valid until {info.get('expires_at')}.")
 
 
 def _academic_year_start(now: datetime | None = None) -> int:
@@ -231,6 +249,7 @@ def _strip_internal_commands(cli_group: click.Group) -> None:
 
 def main() -> None:
     _patch_auth_sources()
+    _patch_session()
     _patch_resolver()
     _patch_doctor()
     _patch_dump()
@@ -240,6 +259,7 @@ def main() -> None:
     from d2l.cli import cli
 
     _strip_internal_commands(cli)
+    cli.add_command(refresh)
     cli(prog_name="ufora")
 
 

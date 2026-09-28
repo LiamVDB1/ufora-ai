@@ -1,0 +1,10 @@
+[Unit]
+Description=Keep the Ufora AI sign-in alive
+
+[Timer]
+OnCalendar=*:0/30
+Persistent=true
+RandomizedDelaySec=60
+
+[Install]
+WantedBy=timers.target

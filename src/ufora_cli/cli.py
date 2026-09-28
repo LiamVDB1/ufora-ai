@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Iterable
+import os
+from collections.abc import Iterable, Mapping
 from importlib import resources
 from pathlib import Path
 
@@ -9,16 +10,27 @@ import click
 
 from . import __version__
 from .core import (
+    D2L_STATE_DIRNAME,
     UFORA_HOST,
     clear_auth_state,
+    clear_stale_chromium_locks,
     harden_d2l_state,
+    has_graphical_session,
+    inherit_graphical_session,
+    is_ssh_session,
     run_d2l_json,
     run_d2l_passthrough,
     sanitize_untrusted_text,
 )
 
 
-def _run(ctx: click.Context, args: Iterable[str], *, interactive: bool = False) -> None:
+def _run(
+    ctx: click.Context,
+    args: Iterable[str],
+    *,
+    interactive: bool = False,
+    env: Mapping[str, str] | None = None,
+) -> None:
     command = list(args)
     harden_d2l_state(create=interactive and bool(command) and command[0] == "login")
     if not interactive:
@@ -27,7 +39,7 @@ def _run(ctx: click.Context, args: Iterable[str], *, interactive: bool = False) 
             command.insert(0, f"--{output_format}")
 
     try:
-        code = run_d2l_passthrough(command, interactive=interactive)
+        code = run_d2l_passthrough(command, interactive=interactive, env=env)
     finally:
         harden_d2l_state()
     if code:
@@ -77,10 +89,34 @@ def setup(ctx: click.Context) -> None:
 @click.pass_context
 def login(ctx: click.Context, headless: bool, channel: str) -> None:
     """Open a browser and sign in with your normal UGent SSO account."""
+    env = dict(os.environ)
+    clear_stale_chromium_locks(Path.home() / D2L_STATE_DIRNAME / "browser_profile")
+    if not headless and not has_graphical_session(env):
+        if is_ssh_session(env):
+            raise click.ClickException(
+                "This SSH session has no forwarded display, so a login window would open "
+                "on this machine's own screen, where you cannot see it. Run `ufora login` "
+                "in a terminal on a machine with a screen and copy ~/.d2l here, "
+                "or reconnect with `ssh -Y`."
+            )
+        env = inherit_graphical_session(env)
+        if not has_graphical_session(env):
+            raise click.ClickException(
+                "No graphical display is available for Ufora login. Run `ufora login` "
+                "from a desktop terminal, or sign in on a machine with a browser and "
+                "copy ~/.d2l to this host."
+            )
     args = ["login", "--channel", channel]
     if headless:
         args.append("--headless")
-    _run(ctx, args, interactive=True)
+    _run(ctx, args, interactive=True, env=env)
+
+
+@cli.command()
+@click.pass_context
+def refresh(ctx: click.Context) -> None:
+    """Renew the token from the saved sign-in (for a keep-alive timer)."""
+    _run(ctx, ["refresh"])
 
 
 @cli.command()

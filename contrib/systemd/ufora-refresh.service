@@ -1,0 +1,7 @@
+[Unit]
+Description=Renew the Ufora AI token from the saved sign-in
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/ufora refresh
+TimeoutStartSec=180

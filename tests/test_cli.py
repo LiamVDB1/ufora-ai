@@ -158,3 +158,85 @@ def test_skill_install_writes_bundled_skill(tmp_path):
     text = skill.read_text(encoding="utf-8")
     assert "# Ufora AI" in text
     assert "read_course_material" in text
+
+
+def test_login_fails_closed_without_display(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: list[list[str]] = []
+    monkeypatch.setattr(cli_module, "harden_d2l_state", lambda **kwargs: None)
+    monkeypatch.setattr(cli_module, "clear_stale_chromium_locks", lambda profile: False)
+    monkeypatch.setattr(cli_module, "is_ssh_session", lambda env=None: False)
+    monkeypatch.setattr(cli_module, "inherit_graphical_session", lambda env: dict(env))
+    monkeypatch.setattr(cli_module, "has_graphical_session", lambda env=None: False)
+    monkeypatch.setattr(
+        cli_module,
+        "run_d2l_passthrough",
+        lambda args, interactive=False, env=None: seen.append(list(args)) or 0,
+    )
+
+    result = CliRunner().invoke(cli_module.cli, ["login"])
+
+    assert result.exit_code != 0
+    assert "No graphical display" in result.output
+    assert seen == []
+
+
+def test_login_ssh_without_display_does_not_open_local_gnome(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    seen: list[list[str]] = []
+    monkeypatch.setattr(cli_module, "harden_d2l_state", lambda **kwargs: None)
+    monkeypatch.setattr(cli_module, "clear_stale_chromium_locks", lambda profile: False)
+    monkeypatch.setattr(cli_module, "has_graphical_session", lambda env=None: False)
+    monkeypatch.setattr(cli_module, "is_ssh_session", lambda env=None: True)
+    monkeypatch.setattr(
+        cli_module,
+        "inherit_graphical_session",
+        lambda env: {**env, "DISPLAY": ":2"},
+    )
+    monkeypatch.setattr(
+        cli_module,
+        "run_d2l_passthrough",
+        lambda args, interactive=False, env=None: seen.append(list(args)) or 0,
+    )
+
+    result = CliRunner().invoke(cli_module.cli, ["login"])
+
+    assert result.exit_code != 0
+    assert "SSH session has no forwarded display" in result.output
+    assert seen == []
+
+
+def test_login_passes_inherited_display_to_browser(monkeypatch: pytest.MonkeyPatch):
+    seen: list[tuple[list[str], dict[str, str]]] = []
+    monkeypatch.setattr(cli_module, "harden_d2l_state", lambda **kwargs: None)
+    monkeypatch.setattr(cli_module, "clear_stale_chromium_locks", lambda profile: False)
+    monkeypatch.setattr(cli_module, "is_ssh_session", lambda env=None: False)
+    monkeypatch.delenv("DISPLAY", raising=False)
+    monkeypatch.delenv("WAYLAND_DISPLAY", raising=False)
+    monkeypatch.setattr(cli_module, "inherit_graphical_session", lambda env: {**env, "DISPLAY": ":2"})
+    monkeypatch.setattr(
+        cli_module,
+        "run_d2l_passthrough",
+        lambda args, interactive=False, env=None: seen.append((list(args), dict(env or {}))) or 0,
+    )
+
+    result = CliRunner().invoke(cli_module.cli, ["--json", "login", "--channel", "chrome"])
+
+    assert result.exit_code == 0, result.output
+    assert seen[0][0] == ["login", "--channel", "chrome"]
+    assert seen[0][1]["DISPLAY"] == ":2"
+
+
+def test_refresh_forwards_to_internal_refresh(monkeypatch: pytest.MonkeyPatch):
+    seen: list[list[str]] = []
+    monkeypatch.setattr(cli_module, "harden_d2l_state", lambda **kwargs: None)
+    monkeypatch.setattr(
+        cli_module,
+        "run_d2l_passthrough",
+        lambda args, interactive=False, env=None: seen.append(list(args)) or 0,
+    )
+
+    result = CliRunner().invoke(cli_module.cli, ["refresh"])
+
+    assert result.exit_code == 0, result.output
+    assert seen == [["refresh"]]

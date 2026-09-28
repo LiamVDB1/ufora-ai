@@ -56,7 +56,7 @@ uv tool install .
 Install the audited release directly from the public repository:
 
 ```bash
-uv tool install git+https://github.com/LiamVDB1/ufora-ai.git@v1.0.2
+uv tool install git+https://github.com/LiamVDB1/ufora-ai.git@v1.1.0
 ```
 
 Use `@main` instead only if you deliberately want unreleased development changes.
@@ -80,6 +80,27 @@ A normal browser window opens. Log into UGent exactly as you normally would. The
 
 This is a pragmatic **local** login mechanism, not an OAuth application registered or endorsed by UGent. The student/course-data client only exposes GET/read operations; the separate login flow uses authentication requests to establish the session/token. The captured browser token must be treated as a sensitive credential. See [SECURITY.md](SECURITY.md) for the exact trust boundary.
 
+### Staying signed in
+
+Brightspace access tokens last about an hour. Ufora AI renews them from the saved sign-in without opening a window: the dedicated browser profile is reopened headlessly and Ufora's own session plus the UGent/Microsoft SSO session behind it are reused. Chromium drops such session cookies whenever a browser closes, so Ufora AI keeps a private copy of only the sign-in-chain cookies (`*.ugent.be`, `*.microsoftonline.com`) in `~/.d2l/session.json` (mode 0600) and restores it on the next launch.
+
+The CLI renews an expired token automatically. MCP tools never touch credential state, so on a machine that serves MCP, keep the token fresh with an explicit renewal on a timer:
+
+```bash
+ufora refresh    # renew now; exits non-zero with "Run: ufora login" when the sign-in is gone
+```
+
+On Linux with systemd, install the bundled user timer (every 30 minutes; it also keeps Ufora's idle timeout from expiring):
+
+```bash
+mkdir -p ~/.config/systemd/user
+cp contrib/systemd/ufora-refresh.{service,timer} ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user enable --now ufora-refresh.timer
+```
+
+You then only need `ufora login` again when UGent itself ends the sign-in (for example a forced re-authentication or password change).
+
 Then verify the installation:
 
 ```bash
@@ -88,7 +109,7 @@ ufora whoami
 ufora courses
 ```
 
-To disconnect this machine and remove the locally cached Brightspace token plus the dedicated Ufora browser profile:
+To disconnect this machine and remove the locally cached Brightspace token, the saved sign-in cookies, and the dedicated Ufora browser profile:
 
 ```bash
 ufora logout
