@@ -99,6 +99,12 @@ systemctl --user daemon-reload
 systemctl --user enable --now ufora-refresh.timer
 ```
 
+On a headless server, sign in on a machine with a screen (also running Ufora AI 1.1+) and copy only the two portable files; the browser profile itself is not portable across operating systems because Chrome encrypts its cookie store per machine:
+
+```bash
+scp ~/.d2l/token.json ~/.d2l/session.json server:.d2l/
+```
+
 You then only need `ufora login` again when UGent itself ends the sign-in (for example a forced re-authentication or password change).
 
 Then verify the installation:

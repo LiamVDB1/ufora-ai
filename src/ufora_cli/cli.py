@@ -96,15 +96,16 @@ def login(ctx: click.Context, headless: bool, channel: str) -> None:
             raise click.ClickException(
                 "This SSH session has no forwarded display, so a login window would open "
                 "on this machine's own screen, where you cannot see it. Run `ufora login` "
-                "in a terminal on a machine with a screen and copy ~/.d2l here, "
-                "or reconnect with `ssh -Y`."
+                "(Ufora AI 1.1+) on a machine with a screen, then copy ~/.d2l/token.json and "
+                "~/.d2l/session.json here; `ufora refresh` keeps it alive from then on. "
+                "`ssh -Y` only helps if your local machine runs an X server (XQuartz on macOS)."
             )
         env = inherit_graphical_session(env)
         if not has_graphical_session(env):
             raise click.ClickException(
                 "No graphical display is available for Ufora login. Run `ufora login` "
                 "from a desktop terminal, or sign in on a machine with a browser and "
-                "copy ~/.d2l to this host."
+                "copy ~/.d2l/token.json and ~/.d2l/session.json to this host."
             )
     args = ["login", "--channel", channel]
     if headless:
