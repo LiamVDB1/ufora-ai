@@ -486,8 +486,16 @@ def download_content_files(
         response = client.content_topic_file(org_id, int(item_id))
         fallback = f"topic-{item_id}"
         filename = _safe_filename(_filename(response, topic), fallback)
-        file_path = destination / filename
+
+        target_dir = destination
+        for folder in topic_path[1:]:
+            target_dir = target_dir / _safe_filename(folder, "folder")
+        target_dir.mkdir(parents=True, exist_ok=True)
+        file_path = target_dir / filename
         _write_new_file(file_path, response.content)
+
+
+
         results.append(
             {
                 "course": _course_identity(org),
