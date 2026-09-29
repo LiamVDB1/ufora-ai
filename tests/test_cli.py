@@ -4,6 +4,7 @@ import pytest
 from click.testing import CliRunner
 
 from ufora_cli import cli as cli_module
+from ufora_cli import core as core_module
 from ufora_cli import course_context, mcp_server
 
 
@@ -213,6 +214,11 @@ def test_login_passes_inherited_display_to_browser(monkeypatch: pytest.MonkeyPat
     monkeypatch.setattr(cli_module, "is_ssh_session", lambda env=None: False)
     monkeypatch.delenv("DISPLAY", raising=False)
     monkeypatch.delenv("WAYLAND_DISPLAY", raising=False)
+    monkeypatch.setattr(
+        cli_module,
+        "has_graphical_session",
+        lambda env=None: core_module.has_graphical_session(env, platform="linux"),
+    )
     monkeypatch.setattr(cli_module, "inherit_graphical_session", lambda env: {**env, "DISPLAY": ":2"})
     monkeypatch.setattr(
         cli_module,
@@ -225,6 +231,31 @@ def test_login_passes_inherited_display_to_browser(monkeypatch: pytest.MonkeyPat
     assert result.exit_code == 0, result.output
     assert seen[0][0] == ["login", "--channel", "chrome"]
     assert seen[0][1]["DISPLAY"] == ":2"
+
+
+def test_login_on_macos_desktop_opens_browser_without_display(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    seen: list[list[str]] = []
+    monkeypatch.setattr(cli_module, "harden_d2l_state", lambda **kwargs: None)
+    monkeypatch.setattr(cli_module, "clear_stale_chromium_locks", lambda profile: False)
+    for key in ("DISPLAY", "WAYLAND_DISPLAY", "SSH_CONNECTION", "SSH_CLIENT", "SSH_TTY"):
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.setattr(
+        cli_module,
+        "has_graphical_session",
+        lambda env=None: core_module.has_graphical_session(env, platform="darwin"),
+    )
+    monkeypatch.setattr(
+        cli_module,
+        "run_d2l_passthrough",
+        lambda args, interactive=False, env=None: seen.append(list(args)) or 0,
+    )
+
+    result = CliRunner().invoke(cli_module.cli, ["login"])
+
+    assert result.exit_code == 0, result.output
+    assert seen == [["login", "--channel", "auto"]]
 
 
 def test_refresh_forwards_to_internal_refresh(monkeypatch: pytest.MonkeyPatch):

@@ -190,9 +190,38 @@ def test_is_ssh_session_reads_ssh_env() -> None:
     assert core.is_ssh_session({"HOME": "/home/liam"}) is False
 
 
+def test_has_graphical_session_linux_requires_display() -> None:
+    assert core.has_graphical_session({"HOME": "/home/liam"}, platform="linux") is False
+    assert core.has_graphical_session({"DISPLAY": ":1"}, platform="linux") is True
+    assert core.has_graphical_session({"WAYLAND_DISPLAY": "wayland-0"}, platform="linux") is True
+
+
+@pytest.mark.parametrize("platform", ["darwin", "win32"])
+def test_has_graphical_session_local_desktop_platforms(platform: str) -> None:
+    assert core.has_graphical_session({"HOME": "/Users/liam"}, platform=platform) is True
+
+
+def test_has_graphical_session_macos_ssh_needs_forwarded_display() -> None:
+    ssh = {"SSH_CONNECTION": "1.2.3.4 1 5.6.7.8 22"}
+
+    assert core.has_graphical_session(ssh, platform="darwin") is False
+    assert core.has_graphical_session({**ssh, "DISPLAY": "localhost:10.0"}, platform="darwin") is True
+
+
+def test_inherit_graphical_session_skips_linux_discovery_on_macos(monkeypatch) -> None:
+    def fail() -> dict[str, str]:
+        raise AssertionError("Linux display discovery must not run on macOS")
+
+    monkeypatch.setattr(core, "discover_graphical_session", fail)
+    ssh = {"SSH_CONNECTION": "1.2.3.4 1 5.6.7.8 22"}
+
+    assert core.inherit_graphical_session(ssh, platform="darwin") == ssh
+
+
 def test_inherit_graphical_session_keeps_existing_display() -> None:
     env = core.inherit_graphical_session(
         {"HOME": "/home/liam", "DISPLAY": ":1"},
+        platform="linux",
         discovered={"DISPLAY": ":2", "WAYLAND_DISPLAY": "wayland-0"},
     )
 
@@ -203,6 +232,7 @@ def test_inherit_graphical_session_keeps_existing_display() -> None:
 def test_inherit_graphical_session_copies_discovered_display() -> None:
     env = core.inherit_graphical_session(
         {"HOME": "/home/liam"},
+        platform="linux",
         discovered={
             "DISPLAY": ":2",
             "WAYLAND_DISPLAY": "wayland-0",

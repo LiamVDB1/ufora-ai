@@ -2,6 +2,12 @@
 
 All notable changes to Ufora AI are documented here.
 
+## Unreleased
+
+### Fixed
+
+- `ufora login` refused to run on macOS and Windows with "No graphical display is available" because display detection only looked for the Linux `DISPLAY`/`WAYLAND_DISPLAY` variables. A local session on those platforms now counts as graphical; an SSH session still needs a forwarded display.
+
 ## 1.1.0 — 2026-09-28
 
 Stay signed in instead of re-running `ufora login` every hour.

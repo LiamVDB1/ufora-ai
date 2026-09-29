@@ -20,6 +20,7 @@ GRAPHICAL_ENV_KEYS = (
     "XDG_SESSION_TYPE",
 )
 CHROMIUM_LOCK_NAMES = ("SingletonLock", "SingletonCookie", "SingletonSocket")
+NATIVE_WINDOW_PLATFORMS = ("darwin", "win32")
 
 
 class UforaError(RuntimeError):
@@ -47,10 +48,26 @@ def ufora_env(base: dict[str, str] | None = None) -> dict[str, str]:
     return env
 
 
-def has_graphical_session(env: Mapping[str, str] | None = None) -> bool:
-    """True when the environment can launch a headed Chromium window."""
+def has_graphical_session(
+    env: Mapping[str, str] | None = None,
+    *,
+    platform: str | None = None,
+) -> bool:
+    """True when the environment can launch a headed Chromium window.
+
+    On Linux that requires an X11 or Wayland display. macOS and Windows have no
+    such variables: a local session can always open a window, while an SSH
+    session can only do so through a forwarded X display (e.g. XQuartz).
+    """
     current = env if env is not None else os.environ
-    return bool(current.get("DISPLAY") or current.get("WAYLAND_DISPLAY"))
+    if current.get("DISPLAY") or current.get("WAYLAND_DISPLAY"):
+        return True
+    return _has_native_window_server(platform) and not is_ssh_session(current)
+
+
+def _has_native_window_server(platform: str | None = None) -> bool:
+    """True on platforms whose desktop is not exposed through DISPLAY/Wayland."""
+    return (platform if platform is not None else sys.platform) in NATIVE_WINDOW_PLATFORMS
 
 
 def is_ssh_session(env: Mapping[str, str] | None = None) -> bool:
@@ -98,10 +115,17 @@ def inherit_graphical_session(
     env: Mapping[str, str],
     *,
     discovered: Mapping[str, str] | None = None,
+    platform: str | None = None,
 ) -> dict[str, str]:
-    """Copy a live graphical session into env when DISPLAY/Wayland are missing."""
+    """Copy a live graphical session into env when DISPLAY/Wayland are missing.
+
+    Discovery reads Linux X11/Wayland state, so it is skipped on macOS and
+    Windows, where a missing display cannot be recovered from the environment.
+    """
     merged = dict(env)
-    if has_graphical_session(merged):
+    if has_graphical_session(merged, platform=platform):
+        return merged
+    if discovered is None and _has_native_window_server(platform):
         return merged
     session = dict(discovered) if discovered is not None else discover_graphical_session()
     for key in GRAPHICAL_ENV_KEYS:
