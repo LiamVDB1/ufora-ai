@@ -40,16 +40,34 @@ UGENT_TIMEZONE = ZoneInfo("Europe/Brussels")
 def _load_saved_token_only() -> str:
     """Load only Ufora's fixed local token file; never inherit cwd/env credentials."""
     data = d2l_auth._read_token_file()
+    auth_cmd = importlib.import_module("d2l.commands.auth_cmd")
+
     if not isinstance(data, dict):
-        raise TokenNotFoundError("No saved Ufora token found. Run: ufora login")
+        if auth_cmd.attempt_auto_login():
+            data = d2l_auth._read_token_file()
+        if not isinstance(data, dict):
+            raise TokenNotFoundError("No saved Ufora token found. Run: ufora login")
 
     token = data.get("token")
     claims = d2l_auth._parse_bearer_claims(token)
     if not claims:
-        raise TokenNotFoundError("Saved Ufora token is invalid. Run: ufora login")
+        if auth_cmd.attempt_auto_login():
+            data = d2l_auth._read_token_file()
+            if isinstance(data, dict):
+                token = data.get("token")
+                claims = d2l_auth._parse_bearer_claims(token)
+        if not claims:
+            raise TokenNotFoundError("Saved Ufora token is invalid. Run: ufora login")
 
     exp = claims.get("exp", data.get("exp", 0))
     if not isinstance(exp, int | float) or exp <= time.time():
+        if auth_cmd.attempt_auto_login():
+            data = d2l_auth._read_token_file()
+            if isinstance(data, dict):
+                fresh_token = data.get("token")
+                fresh_claims = d2l_auth._parse_bearer_claims(fresh_token)
+                if fresh_claims and fresh_claims.get("exp", 0) > time.time():
+                    return fresh_token
         raise TokenExpiredError("Saved Ufora token is expired. Run: ufora login")
     return token
 
@@ -67,6 +85,7 @@ def _patch_session() -> None:
     auth_cmd = importlib.import_module("d2l.commands.auth_cmd")
     auth_cmd._launch_context = session.wrap_launch_context(auth_cmd._launch_context)
     auth_cmd._parse_token = session.require_min_lifetime(auth_cmd._parse_token)
+    auth_cmd._capture_and_save = session.ufora_capture_and_save
 
 
 @click.command(name="refresh")
@@ -74,7 +93,9 @@ def refresh() -> None:
     """Renew the token from the saved sign-in without opening a visible browser."""
     auth_cmd = importlib.import_module("d2l.commands.auth_cmd")
     if not auth_cmd._capture_and_save(headless=True, channel="auto", quiet=True):
-        click.echo("Your Ufora session needs a fresh sign-in. Run: ufora login", err=True)
+        click.echo(
+            "Your Ufora session needs a fresh sign-in. Run: ufora login", err=True
+        )
         raise SystemExit(1)
     info = d2l_auth.token_info()
     click.echo(f"Ufora token renewed; valid until {info.get('expires_at')}.")
@@ -144,7 +165,9 @@ def _clean_doctor_checks(checks: list[dict]) -> list[dict]:
         else:
             check["detail"] = _translate_upstream_text(str(check.get("detail") or ""))
         if check.get("check") == "courses" and check.get("ok"):
-            check["detail"] = str(check["detail"]).replace("active course(s)", "current course(s)")
+            check["detail"] = str(check["detail"]).replace(
+                "active course(s)", "current course(s)"
+            )
 
         next_step = check.get("next_step")
         if next_step:
@@ -170,15 +193,90 @@ def _patch_dump() -> None:
     original_json = dump_module._dump_json
     original_text = dump_module._dump_text
 
-    def dump_json(me, now, courses, overdue, due_soon, client, sections, shallow, since_dt, since_iso, since_hours):
+    def dump_json(
+        me,
+        now,
+        courses,
+        overdue,
+        due_soon,
+        client,
+        sections,
+        shallow,
+        since_dt,
+        since_iso,
+        since_hours,
+    ):
         if shallow:
-            return original_json(me, now, courses, overdue, due_soon, client, set(), False, since_dt, since_iso, since_hours)
-        return original_json(me, now, courses, overdue, due_soon, client, sections, shallow, since_dt, since_iso, since_hours)
+            return original_json(
+                me,
+                now,
+                courses,
+                overdue,
+                due_soon,
+                client,
+                set(),
+                False,
+                since_dt,
+                since_iso,
+                since_hours,
+            )
+        return original_json(
+            me,
+            now,
+            courses,
+            overdue,
+            due_soon,
+            client,
+            sections,
+            shallow,
+            since_dt,
+            since_iso,
+            since_hours,
+        )
 
-    def dump_text(me, now, courses, overdue, due_soon, client, sections, shallow, fmt, since_dt, since_iso, since_hours):
+    def dump_text(
+        me,
+        now,
+        courses,
+        overdue,
+        due_soon,
+        client,
+        sections,
+        shallow,
+        fmt,
+        since_dt,
+        since_iso,
+        since_hours,
+    ):
         if shallow:
-            return original_text(me, now, courses, overdue, due_soon, client, set(), False, fmt, since_dt, since_iso, since_hours)
-        return original_text(me, now, courses, overdue, due_soon, client, sections, shallow, fmt, since_dt, since_iso, since_hours)
+            return original_text(
+                me,
+                now,
+                courses,
+                overdue,
+                due_soon,
+                client,
+                set(),
+                False,
+                fmt,
+                since_dt,
+                since_iso,
+                since_hours,
+            )
+        return original_text(
+            me,
+            now,
+            courses,
+            overdue,
+            due_soon,
+            client,
+            sections,
+            shallow,
+            fmt,
+            since_dt,
+            since_iso,
+            since_hours,
+        )
 
     dump_module._dump_json = dump_json
     dump_module._dump_text = dump_text

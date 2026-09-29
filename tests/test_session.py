@@ -15,7 +15,13 @@ def home(monkeypatch: pytest.MonkeyPatch, tmp_path):
 
 
 def cookie(name: str, domain: str, expires: float = -1) -> dict:
-    return {"name": name, "value": "v", "domain": domain, "path": "/", "expires": expires}
+    return {
+        "name": name,
+        "value": "v",
+        "domain": domain,
+        "path": "/",
+        "expires": expires,
+    }
 
 
 class FakeContext:
@@ -60,7 +66,9 @@ def test_save_is_private_and_filters_foreign_cookies(home):
     path = home / ".d2l" / "session.json"
     assert saved == 1
     assert path.stat().st_mode & 0o777 == 0o600
-    assert [c["name"] for c in json.loads(path.read_text())["cookies"]] == ["d2lSessionVal"]
+    assert [c["name"] for c in json.loads(path.read_text())["cookies"]] == [
+        "d2lSessionVal"
+    ]
 
 
 def test_load_drops_expired_but_keeps_session_cookies(home):
@@ -73,7 +81,10 @@ def test_load_drops_expired_but_keeps_session_cookies(home):
         ]
     )
 
-    assert [c["name"] for c in session.load_session_cookies(now=now)] == ["session", "fresh"]
+    assert [c["name"] for c in session.load_session_cookies(now=now)] == [
+        "session",
+        "fresh",
+    ]
 
 
 def test_load_tolerates_missing_or_corrupt_file(home):
@@ -85,9 +96,13 @@ def test_load_tolerates_missing_or_corrupt_file(home):
 
 def test_launch_restores_cookies_and_saves_them_on_close(home, monkeypatch):
     monkeypatch.setattr(session, "clear_stale_chromium_locks", lambda profile: False)
-    session.save_session_cookies([cookie("rejected", "ugent.be"), cookie("old", "ufora.ugent.be")])
+    session.save_session_cookies(
+        [cookie("rejected", "ugent.be"), cookie("old", "ufora.ugent.be")]
+    )
     context = FakeContext([cookie("renewed", "welkom.ugent.be")])
-    launch = session.wrap_launch_context(lambda p, profile, headless, channel: (context, "Chromium"))
+    launch = session.wrap_launch_context(
+        lambda p, profile, headless, channel: (context, "Chromium")
+    )
 
     returned, label = launch(None, home / ".d2l" / "browser_profile", True, "auto")
     returned.close()
@@ -153,3 +168,103 @@ def test_refresh_failure_asks_for_login(monkeypatch):
 
     assert result.exit_code == 1
     assert "ufora login" in result.output
+
+
+def test_load_saved_token_auto_renews_expired_token(home, monkeypatch):
+    import importlib
+
+    state = home / ".d2l"
+    state.mkdir(parents=True, exist_ok=True)
+    token_file = state / "token.json"
+
+    # Write expired token
+    now = time.time()
+    token_file.write_text(
+        json.dumps(
+            {
+                "token": "expired.jwt.token",
+                "exp": now - 100,
+                "sub": "123",
+                "tenant": "ugent",
+                "captured_at": now - 3600,
+            }
+        )
+    )
+
+    auth_cmd = importlib.import_module("d2l.commands.auth_cmd")
+    monkeypatch.setattr(d2l_entry.d2l_auth, "TOKEN_FILE", token_file)
+
+    def fake_attempt_auto_login():
+        token_file.write_text(
+            json.dumps(
+                {
+                    "token": "fresh.jwt.token",
+                    "exp": now + 3600,
+                    "sub": "123",
+                    "tenant": "ugent",
+                    "captured_at": now,
+                }
+            )
+        )
+        return True
+
+    monkeypatch.setattr(auth_cmd, "attempt_auto_login", fake_attempt_auto_login)
+    monkeypatch.setattr(
+        d2l_entry.d2l_auth,
+        "_parse_bearer_claims",
+        lambda t: (
+            {
+                "exp": now - 100,
+                "iss": "https://api.brightspace.com/auth",
+                "aud": "https://api.brightspace.com/auth/token",
+            }
+            if "expired" in t
+            else {
+                "exp": now + 3600,
+                "iss": "https://api.brightspace.com/auth",
+                "aud": "https://api.brightspace.com/auth/token",
+            }
+        ),
+    )
+
+    token = d2l_entry._load_saved_token_only()
+    assert token == "fresh.jwt.token"
+
+
+def test_load_saved_token_raises_when_auto_renew_fails(home, monkeypatch):
+    import importlib
+
+    from d2l.errors import TokenExpiredError
+
+    state = home / ".d2l"
+    state.mkdir(parents=True, exist_ok=True)
+    token_file = state / "token.json"
+
+    now = time.time()
+    token_file.write_text(
+        json.dumps(
+            {
+                "token": "expired.jwt.token",
+                "exp": now - 100,
+                "sub": "123",
+                "tenant": "ugent",
+                "captured_at": now - 3600,
+            }
+        )
+    )
+
+    auth_cmd = importlib.import_module("d2l.commands.auth_cmd")
+    monkeypatch.setattr(d2l_entry.d2l_auth, "TOKEN_FILE", token_file)
+    monkeypatch.setattr(auth_cmd, "attempt_auto_login", lambda: False)
+    monkeypatch.setattr(
+        d2l_entry.d2l_auth,
+        "_parse_bearer_claims",
+        lambda t: {
+            "exp": now - 100,
+            "iss": "https://api.brightspace.com/auth",
+            "aud": "https://api.brightspace.com/auth/token",
+        },
+    )
+
+    with pytest.raises(TokenExpiredError, match="Saved Ufora token is expired"):
+        d2l_entry._load_saved_token_only()
