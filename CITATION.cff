@@ -5,7 +5,7 @@ type: software
 authors:
   - family-names: Van den Broeck
     given-names: Liam
-version: 1.1.0
+version: 1.2.0
 date-released: 2026-09-13
 url: https://github.com/LiamVDB1/ufora-ai
 repository-code: https://github.com/LiamVDB1/ufora-ai

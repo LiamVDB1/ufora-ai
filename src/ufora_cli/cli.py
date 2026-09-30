@@ -8,7 +8,7 @@ from pathlib import Path
 
 import click
 
-from . import __version__
+from . import __version__, session_transfer
 from .core import (
     D2L_STATE_DIRNAME,
     UFORA_HOST,
@@ -96,16 +96,17 @@ def login(ctx: click.Context, headless: bool, channel: str) -> None:
             raise click.ClickException(
                 "This SSH session has no forwarded display, so a login window would open "
                 "on this machine's own screen, where you cannot see it. Run `ufora login` "
-                "(Ufora AI 1.1+) on a machine with a screen, then copy ~/.d2l/token.json and "
-                "~/.d2l/session.json here; `ufora refresh` keeps it alive from then on. "
+                "(Ufora AI 1.2+) on a machine with a screen, then move the sign-in here with "
+                "`ufora session export - | ssh <this-host> ~/.local/bin/ufora session import -`; "
+                "`ufora refresh` keeps it alive from then on. "
                 "`ssh -Y` only helps if your local machine runs an X server (XQuartz on macOS)."
             )
         env = inherit_graphical_session(env)
         if not has_graphical_session(env):
             raise click.ClickException(
                 "No graphical display is available for Ufora login. Run `ufora login` "
-                "from a desktop terminal, or sign in on a machine with a browser and "
-                "copy ~/.d2l/token.json and ~/.d2l/session.json to this host."
+                "from a desktop terminal, or sign in on a machine with a browser and move "
+                "the sign-in here with `ufora session export` / `ufora session import`."
             )
     args = ["login", "--channel", channel]
     if headless:
@@ -114,10 +115,53 @@ def login(ctx: click.Context, headless: bool, channel: str) -> None:
 
 
 @cli.command()
+@click.option("--debug", is_flag=True, help="Trace the sign-in chain and save screenshots under ~/.d2l/debug/.")
 @click.pass_context
-def refresh(ctx: click.Context) -> None:
+def refresh(ctx: click.Context, debug: bool) -> None:
     """Renew the token from the saved sign-in (for a keep-alive timer)."""
-    _run(ctx, ["refresh"])
+    _run(ctx, ["refresh", *(["--debug"] if debug else [])])
+
+
+@cli.group(name="session")
+def session_group() -> None:
+    """Move a sign-in between machines (e.g. laptop login to a server timer)."""
+
+
+@session_group.command(name="export")
+@click.argument("file", default="-")
+def session_export(file: str) -> None:
+    """Write the saved sign-in and token as a bundle (FILE, or `-` for stdout).
+
+    The bundle grants access to your Ufora account: pipe it straight into
+    `ufora session import` on the other machine rather than leaving it around.
+    """
+    try:
+        harden_d2l_state()
+        bundle = session_transfer.export_bundle()
+        session_transfer.write_bundle(file, bundle)
+    except OSError as exc:
+        raise _safe_click_error(exc) from exc
+    cookies = len(bundle["session"]["cookies"])
+    token = "with" if bundle["token"] else "without"
+    click.echo(f"Exported {cookies} sign-in cookies {token} a token.", err=True)
+
+
+@session_group.command(name="import")
+@click.argument("file", default="-")
+def session_import(file: str) -> None:
+    """Merge a bundle from `ufora session export` into this machine (FILE, or `-` for stdin)."""
+    try:
+        bundle = session_transfer.read_bundle(file)
+        summary = session_transfer.import_bundle(bundle)
+        harden_d2l_state(create=True)
+    except (session_transfer.BundleError, OSError) as exc:
+        raise _safe_click_error(exc) from exc
+    click.echo(f"Imported {summary.cookies_imported} sign-in cookies ({summary.cookies_total} saved).")
+    if summary.token_replaced:
+        click.echo("Token replaced with the newer one from the bundle.")
+    elif bundle["token"]:
+        click.echo("Kept this machine's token (it lasts at least as long as the bundle's).")
+    click.echo("Run `ufora refresh` to confirm the sign-in works here.")
 
 
 @cli.command()

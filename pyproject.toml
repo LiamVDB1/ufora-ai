@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "ufora-ai"
-version = "1.1.0"
+version = "1.2.0"
 description = "Unofficial read-only CLI and MCP integration for UGent Ufora (D2L Brightspace)"
 readme = "README.md"
 requires-python = ">=3.11"

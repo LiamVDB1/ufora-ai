@@ -2,11 +2,21 @@
 
 All notable changes to Ufora AI are documented here.
 
-## Unreleased
+## 1.2.0 — 2026-09-30
+
+`ufora refresh` now actually renews the token on a headless machine.
 
 ### Fixed
 
+- headless renewal never completed: once Ufora's own session had timed out (about an hour), `/d2l/home` redirected to UGent's landing page and then to Microsoft's account picker, both of which need a click, while the renewal only waited passively for the page to issue a token. Renewal now follows the single "Ufora login" link, picks the single signed-in Microsoft account and answers "Stay signed in?"; anything else (a credential prompt, several accounts) fails loudly with the page it stopped on;
+- a failed renewal could overwrite `~/.d2l/session.json` with the degraded cookie set of a signed-out browser. Cookies are saved only after a successful capture and always merged (newest per domain, name and path; unexpired saved cookies are kept);
+- the failure message now says when the last successful renewal happened and what the browser was doing when it stopped;
 - `ufora login` refused to run on macOS and Windows with "No graphical display is available" because display detection only looked for the Linux `DISPLAY`/`WAYLAND_DISPLAY` variables. A local session on those platforms now counts as graphical; an SSH session still needs a forwarded display.
+
+### Added
+
+- `ufora refresh --debug` (or `UFORA_REFRESH_DEBUG=1`) traces the sign-in chain (URLs without query strings, page titles, screenshots) under `~/.d2l/debug/<timestamp>/`, never cookie or token values;
+- `ufora session export [FILE]` / `ufora session import [FILE]` (`-` for stdin/stdout) move a sign-in from a laptop to a server in one command: `ufora session export - | ssh server ~/.local/bin/ufora session import -`.
 
 ## 1.1.0 — 2026-09-28
 

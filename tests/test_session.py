@@ -95,7 +95,8 @@ def test_launch_restores_cookies_and_saves_them_on_close(home, monkeypatch):
     assert label == "Chromium"
     assert [c["name"] for c in context.added] == ["old"]
     assert context.closed
-    assert [c["name"] for c in session.load_session_cookies()] == ["renewed"]
+    # Closing merges: the renewed cookie joins the saved ones instead of replacing them.
+    assert sorted(c["name"] for c in session.load_session_cookies()) == ["old", "rejected", "renewed"]
 
 
 def test_launch_lock_is_released_after_close_and_failed_launch(home, monkeypatch):
@@ -142,14 +143,57 @@ def test_internal_cli_patches_upstream_login_and_exposes_refresh(monkeypatch):
 
 
 def test_refresh_failure_asks_for_login(monkeypatch):
-    import importlib
-
     from click.testing import CliRunner
 
-    auth_cmd = importlib.import_module("d2l.commands.auth_cmd")
-    monkeypatch.setattr(auth_cmd, "_capture_and_save", lambda **kwargs: False)
+    from ufora_cli import renewal
+
+    failed = renewal.RenewalResult(False, "timed out at https://elosp.ugent.be/welcome", ("clicked",))
+    monkeypatch.setattr(renewal, "renew_headless", lambda channel="auto", *, diagnostics=None: failed)
+    monkeypatch.setattr(renewal, "last_renewal_summary", lambda: "last successful renewal: never on this machine")
 
     result = CliRunner().invoke(d2l_entry.refresh)
 
     assert result.exit_code == 1
     assert "ufora login" in result.output
+    assert "elosp.ugent.be" in result.output
+    assert "last successful renewal" in result.output
+
+
+def test_merge_keeps_unexpired_existing_and_prefers_fresh():
+    now = 1_000_000
+    existing = [
+        cookie("keep", ".ugent.be", expires=now + 100),
+        cookie("stale", ".ugent.be", expires=now - 1),
+        {**cookie("shared", "ufora.ugent.be"), "value": "old"},
+    ]
+    fresh = [{**cookie("shared", "ufora.ugent.be"), "value": "new"}, cookie("foreign", "example.com")]
+
+    merged = {c["name"]: c for c in session.merge_session_cookies(existing, fresh, now=now)}
+
+    assert set(merged) == {"keep", "shared"}
+    assert merged["shared"]["value"] == "new"
+
+
+def test_failed_launch_does_not_degrade_saved_session(home):
+    session.save_session_cookies([cookie("ESTSAUTH", ".login.microsoftonline.com"), cookie("d2lSessionVal", "ufora.ugent.be")])
+    context = FakeContext(cookies=[cookie("d2lSessionVal", "ufora.ugent.be")])
+    wrapped = session.wrap_launch_context(lambda p, profile, headless, channel: (context, ["launched"]))
+
+    ctx, _ = wrapped(None, str(home / ".d2l" / "browser_profile"), True, "auto")
+    session.set_save_on_close(ctx, False)
+    ctx.close()
+
+    assert context.closed
+    assert {c["name"] for c in session.load_session_cookies()} == {"ESTSAUTH", "d2lSessionVal"}
+
+
+def test_close_merges_instead_of_replacing(home):
+    session.save_session_cookies([cookie("ESTSAUTH", ".login.microsoftonline.com")])
+    context = FakeContext(cookies=[cookie("d2lSessionVal", "ufora.ugent.be")])
+    wrapped = session.wrap_launch_context(lambda p, profile, headless, channel: (context, ["launched"]))
+
+    ctx, _ = wrapped(None, str(home / ".d2l" / "browser_profile"), True, "auto")
+    ctx.close()
+
+    assert {c["name"] for c in session.load_session_cookies()} == {"ESTSAUTH", "d2lSessionVal"}
+    assert session.session_saved_at() > 0

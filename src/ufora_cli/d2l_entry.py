@@ -22,7 +22,7 @@ from d2l import auth as d2l_auth
 from d2l.errors import D2LError, TokenExpiredError, TokenNotFoundError
 from d2l.resolver import CourseResolver
 
-from . import __version__, session
+from . import __version__, renewal, session
 from .core import _translate_upstream_text
 
 
@@ -67,14 +67,21 @@ def _patch_session() -> None:
     auth_cmd = importlib.import_module("d2l.commands.auth_cmd")
     auth_cmd._launch_context = session.wrap_launch_context(auth_cmd._launch_context)
     auth_cmd._parse_token = session.require_min_lifetime(auth_cmd._parse_token)
+    # Headless captures (this CLI's refresh, upstream's automatic re-login) must
+    # click through UGent's landing page and Microsoft's account picker.
+    auth_cmd._capture_and_save = renewal.wrap_capture_and_save(auth_cmd._capture_and_save)
 
 
 @click.command(name="refresh")
-def refresh() -> None:
+@click.option("--debug", is_flag=True, help="Trace the sign-in chain and save screenshots under ~/.d2l/debug/.")
+def refresh(debug: bool) -> None:
     """Renew the token from the saved sign-in without opening a visible browser."""
-    auth_cmd = importlib.import_module("d2l.commands.auth_cmd")
-    if not auth_cmd._capture_and_save(headless=True, channel="auto", quiet=True):
-        click.echo("Your Ufora session needs a fresh sign-in. Run: ufora login", err=True)
+    diagnostics = renewal.Diagnostics.from_flags(debug)
+    result = renewal.renew_headless(diagnostics=diagnostics)
+    if diagnostics.enabled:
+        click.echo(f"Diagnostics saved under {diagnostics.directory}", err=True)
+    if not result.ok:
+        click.echo(renewal.failure_message(result), err=True)
         raise SystemExit(1)
     info = d2l_auth.token_info()
     click.echo(f"Ufora token renewed; valid until {info.get('expires_at')}.")

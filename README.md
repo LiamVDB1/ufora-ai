@@ -56,7 +56,7 @@ uv tool install .
 Install the audited release directly from the public repository:
 
 ```bash
-uv tool install git+https://github.com/LiamVDB1/ufora-ai.git@v1.1.0
+uv tool install git+https://github.com/LiamVDB1/ufora-ai.git@v1.2.0
 ```
 
 Use `@main` instead only if you deliberately want unreleased development changes.
@@ -84,10 +84,13 @@ This is a pragmatic **local** login mechanism, not an OAuth application register
 
 Brightspace access tokens last about an hour. Ufora AI renews them from the saved sign-in without opening a window: the dedicated browser profile is reopened headlessly and Ufora's own session plus the UGent/Microsoft SSO session behind it are reused. Chromium drops such session cookies whenever a browser closes, so Ufora AI keeps a private copy of only the sign-in-chain cookies (`*.ugent.be`, `*.microsoftonline.com`) in `~/.d2l/session.json` (mode 0600) and restores it on the next launch.
 
+Once Ufora's own session has timed out, that headless browser lands on UGent's sign-in landing page and then on Microsoft's account picker. Ufora AI clicks through exactly those two deterministic steps (the single "Ufora login" link, the single signed-in account, and "Stay signed in?" if asked). Anything that needs a person, such as a password prompt or a choice between accounts, makes the renewal fail loudly with the page it stopped on and the time of the last successful renewal.
+
 The CLI renews an expired token automatically. MCP tools never touch credential state, so on a machine that serves MCP, keep the token fresh with an explicit renewal on a timer:
 
 ```bash
-ufora refresh    # renew now; exits non-zero with "Run: ufora login" when the sign-in is gone
+ufora refresh            # renew now; exits non-zero with "Run: ufora login" when the sign-in is gone
+ufora refresh --debug    # same, tracing every page (no secrets) to ~/.d2l/debug/<timestamp>/
 ```
 
 On Linux with systemd, install the bundled user timer (every 30 minutes; it also keeps Ufora's idle timeout from expiring):
@@ -99,11 +102,13 @@ systemctl --user daemon-reload
 systemctl --user enable --now ufora-refresh.timer
 ```
 
-On a headless server, sign in on a machine with a screen (also running Ufora AI 1.1+) and copy only the two portable files; the browser profile itself is not portable across operating systems because Chrome encrypts its cookie store per machine:
+On a headless server, sign in on a machine with a screen (also running Ufora AI 1.2+) and move the sign-in over in one command. The bundle holds only the sign-in-chain cookies and the current token; the browser profile itself is not portable across operating systems because Chrome encrypts its cookie store per machine:
 
 ```bash
-scp ~/.d2l/token.json ~/.d2l/session.json server:.d2l/
+ufora session export - | ssh server '~/.local/bin/ufora session import -'
 ```
+
+Import merges rather than replaces (newest cookie per domain and name, the longer-lived token), so it is safe to run again after a later login. `ufora session export bundle.json` writes a 0600 file instead when you prefer to copy it yourself; delete it afterwards, it grants access to your Ufora account.
 
 You then only need `ufora login` again when UGent itself ends the sign-in (for example a forced re-authentication or password change).
 

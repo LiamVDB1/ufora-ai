@@ -42,7 +42,7 @@ def is_session_cookie_domain(domain: str) -> bool:
     return any(host == allowed or host.endswith(f".{allowed}") for allowed in SESSION_COOKIE_DOMAINS)
 
 
-def save_session_cookies(cookies: list[dict[str, Any]]) -> int:
+def save_session_cookies(cookies: list[dict[str, Any]], *, saved_at: int | None = None) -> int:
     """Persist sign-in cookies privately (0600), replacing the previous set."""
     kept = [cookie for cookie in cookies if is_session_cookie_domain(str(cookie.get("domain", "")))]
     target = session_file()
@@ -52,7 +52,7 @@ def save_session_cookies(cookies: list[dict[str, Any]]) -> int:
         temporary.unlink()
     fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     with os.fdopen(fd, "w", encoding="utf-8") as handle:
-        json.dump({"saved_at": int(time.time()), "cookies": kept}, handle)
+        json.dump({"saved_at": int(time.time()) if saved_at is None else saved_at, "cookies": kept}, handle)
     os.replace(temporary, target)
     return len(kept)
 
@@ -74,6 +74,47 @@ def load_session_cookies(*, now: float | None = None) -> list[dict[str, Any]]:
         and is_session_cookie_domain(str(cookie.get("domain", "")))
         and not (0 < float(cookie.get("expires", -1)) <= current)
     ]
+
+
+def session_saved_at() -> float:
+    """When the saved sign-in was last written, or 0 when there is none."""
+    try:
+        data = json.loads(session_file().read_text(encoding="utf-8"))
+        return float(data.get("saved_at") or 0) if isinstance(data, dict) else 0.0
+    except (OSError, ValueError, TypeError):
+        return 0.0
+
+
+def _cookie_key(cookie: dict[str, Any]) -> tuple[str, str, str]:
+    return (str(cookie.get("domain", "")).lstrip(".").lower(), str(cookie.get("name", "")), str(cookie.get("path", "/")))
+
+
+def merge_session_cookies(
+    existing: list[dict[str, Any]], fresh: list[dict[str, Any]], *, now: float | None = None
+) -> list[dict[str, Any]]:
+    """Combine two cookie sets: a fresh cookie wins, an unexpired existing one survives.
+
+    A browser that failed to finish signing in has usually lost cookies rather
+    than gained them, so its jar must never simply replace the saved one.
+    """
+    current = time.time() if now is None else now
+    merged: dict[tuple[str, str, str], dict[str, Any]] = {}
+    for cookie in [*existing, *fresh]:
+        if not is_session_cookie_domain(str(cookie.get("domain", ""))):
+            continue
+        if 0 < float(cookie.get("expires", -1)) <= current:
+            continue
+        merged[_cookie_key(cookie)] = cookie
+    return list(merged.values())
+
+
+SAVE_ON_CLOSE_ATTR = "_ufora_save_on_close"
+
+
+def set_save_on_close(context, enabled: bool) -> None:
+    """Decide whether closing this browser writes its cookies back (default: yes)."""
+    with contextlib.suppress(Exception):
+        setattr(context, SAVE_ON_CLOSE_ATTR, enabled)
 
 
 @contextlib.contextmanager
@@ -128,8 +169,9 @@ def wrap_launch_context(original):
 
         def close_and_save(*args, **kwargs):
             try:
-                with contextlib.suppress(Exception):
-                    save_session_cookies(context.cookies())
+                if getattr(context, SAVE_ON_CLOSE_ATTR, True):
+                    with contextlib.suppress(Exception):
+                        save_session_cookies(merge_session_cookies(load_session_cookies(), context.cookies()))
                 return close(*args, **kwargs)
             finally:
                 lock.__exit__(None, None, None)
