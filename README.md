@@ -76,7 +76,9 @@ uv run pytest
 ufora login
 ```
 
-A normal browser window opens. Log into UGent exactly as you normally would. The underlying `d2l-cli` flow uses a dedicated local browser profile and, after UGent SSO has completed, retrieves a Brightspace web access token from that authenticated browser session. Ufora AI stores the resulting session material under `~/.d2l/` and never receives your UGent password. The public Ufora AI client intentionally ignores ambient `D2L_TOKEN` environment values and cwd `.env` token fallbacks, so authentication cannot silently change based on the directory or shell environment in which you run it.
+When this machine has signed in before, `ufora login` first reuses that sign-in without a window, clicking the "Ufora login" link and your signed-in Microsoft account for you (see [Staying signed in](#staying-signed-in)). This also works over SSH. Only when UGent needs you, for example for a password or a choice between accounts, does it say why and open a browser window. `ufora login --interactive` skips the silent attempt.
+
+In the browser window, log into UGent exactly as you normally would. The underlying `d2l-cli` flow uses a dedicated local browser profile and, after UGent SSO has completed, retrieves a Brightspace web access token from that authenticated browser session. Ufora AI stores the resulting session material under `~/.d2l/` and never receives your UGent password. The public Ufora AI client intentionally ignores ambient `D2L_TOKEN` environment values and cwd `.env` token fallbacks, so authentication cannot silently change based on the directory or shell environment in which you run it.
 
 This is a pragmatic **local** login mechanism, not an OAuth application registered or endorsed by UGent. The student/course-data client only exposes GET/read operations; the separate login flow uses authentication requests to establish the session/token. The captured browser token must be treated as a sensitive credential. See [SECURITY.md](SECURITY.md) for the exact trust boundary.
 

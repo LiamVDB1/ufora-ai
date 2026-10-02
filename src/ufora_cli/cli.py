@@ -8,7 +8,7 @@ from pathlib import Path
 
 import click
 
-from . import __version__, session_transfer
+from . import __version__, session, session_transfer
 from .core import (
     D2L_STATE_DIRNAME,
     UFORA_HOST,
@@ -18,10 +18,14 @@ from .core import (
     has_graphical_session,
     inherit_graphical_session,
     is_ssh_session,
+    run_d2l_captured,
     run_d2l_json,
     run_d2l_passthrough,
     sanitize_untrusted_text,
 )
+
+# Launching Chromium plus the headless renewal's own 60 s sign-in wait.
+SILENT_SIGN_IN_TIMEOUT_SECONDS = 180
 
 
 def _run(
@@ -78,8 +82,29 @@ def setup(ctx: click.Context) -> None:
     _run(ctx, ["doctor"])
 
 
+def _has_saved_sign_in() -> bool:
+    """True when an earlier login left cookies or a browser profile to reuse."""
+    return session.session_file().exists() or (session.state_dir() / "browser_profile").is_dir()
+
+
+def _silent_sign_in() -> bool:
+    """Renew from the saved sign-in without a window; explain why when that is not enough."""
+    click.echo("Signing in with the saved UGent sign-in (no window)...", err=True)
+    code, out, err = run_d2l_captured(["refresh"], timeout=SILENT_SIGN_IN_TIMEOUT_SECONDS)
+    if code == 0:
+        click.echo(out.strip() or "Signed in.")
+        return True
+    # The renewal's own advice is "Run: ufora login", which is what is running now.
+    reasons = [line.strip() for line in err.splitlines() if line.strip() and "Run: ufora login" not in line]
+    click.echo("The saved sign-in needs you this time.", err=True)
+    for reason in reasons:
+        click.echo(f"  {reason}", err=True)
+    return False
+
+
 @cli.command()
 @click.option("--headless", is_flag=True, help="Use a headless browser (mainly for a server with saved SSO cookies).")
+@click.option("--interactive", is_flag=True, help="Skip the silent attempt and always open a login window.")
 @click.option(
     "--channel",
     type=click.Choice(["auto", "chromium", "chrome", "msedge"]),
@@ -87,10 +112,19 @@ def setup(ctx: click.Context) -> None:
     show_default=True,
 )
 @click.pass_context
-def login(ctx: click.Context, headless: bool, channel: str) -> None:
-    """Open a browser and sign in with your normal UGent SSO account."""
+def login(ctx: click.Context, headless: bool, interactive: bool, channel: str) -> None:
+    """Sign in with your normal UGent SSO account.
+
+    The saved sign-in is tried first without a window: the "Ufora login" link
+    and your signed-in Microsoft account are clicked for you. A browser window
+    opens only when UGent needs you, e.g. for a password or an account choice.
+    """
+    if headless and interactive:
+        raise click.UsageError("--headless and --interactive cannot be combined.")
     env = dict(os.environ)
     clear_stale_chromium_locks(Path.home() / D2L_STATE_DIRNAME / "browser_profile")
+    if not headless and not interactive and _has_saved_sign_in() and _silent_sign_in():
+        return
     if not headless and not has_graphical_session(env):
         if is_ssh_session(env):
             raise click.ClickException(

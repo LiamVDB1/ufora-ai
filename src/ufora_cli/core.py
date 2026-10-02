@@ -362,6 +362,36 @@ def run_d2l_passthrough(
     return completed.returncode
 
 
+def run_d2l_captured(
+    args: Iterable[str], *, timeout: int = DEFAULT_TIMEOUT_SECONDS
+) -> tuple[int, str, str]:
+    """Run the internal Brightspace command without echoing it.
+
+    Returns the exit code plus sanitized stdout and stderr, so the caller decides
+    what the user sees. A timeout is reported as a failure, never raised.
+    """
+    harden_d2l_state()
+    command = [*_d2l_command(), *list(args)]
+    try:
+        completed = subprocess.run(
+            command,
+            env=ufora_env(),
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired:
+        return 1, "", f"timed out after {timeout} seconds"
+    finally:
+        harden_d2l_state()
+    return (
+        completed.returncode,
+        sanitize_untrusted_text(_translate_upstream_text(completed.stdout or "")),
+        sanitize_untrusted_text(_translate_upstream_text(completed.stderr or "")),
+    )
+
+
 def run_d2l_json(
     args: Iterable[str], *, timeout: int = DEFAULT_TIMEOUT_SECONDS
 ) -> Any:

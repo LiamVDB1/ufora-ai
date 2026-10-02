@@ -2,6 +2,12 @@
 
 All notable changes to Ufora AI are documented here.
 
+## Unreleased
+
+### Changed
+
+- `ufora login` first reuses the saved sign-in without a window (the same click-through as `ufora refresh`) and opens a browser only when UGent needs a password or an account choice, after saying why. It therefore also succeeds over SSH while the saved sign-in is alive. `ufora login --interactive` always opens the window.
+
 ## 1.2.0 — 2026-09-30
 
 `ufora refresh` now actually renews the token on a headless machine.

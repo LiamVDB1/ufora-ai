@@ -8,6 +8,39 @@ from ufora_cli import core as core_module
 from ufora_cli import course_context, mcp_server
 
 
+@pytest.fixture(autouse=True)
+def _no_saved_sign_in(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep this machine's real ~/.d2l out of login tests; tests opt in explicitly."""
+    monkeypatch.setattr(cli_module, "_has_saved_sign_in", lambda: False)
+
+
+def _fake_login_env(monkeypatch: pytest.MonkeyPatch, *, ssh: bool = False, graphical: bool = True) -> list[list[str]]:
+    """Stub everything around `ufora login` and record visible-login invocations."""
+    visible: list[list[str]] = []
+    monkeypatch.setattr(cli_module, "harden_d2l_state", lambda **kwargs: None)
+    monkeypatch.setattr(cli_module, "clear_stale_chromium_locks", lambda profile: False)
+    monkeypatch.setattr(cli_module, "is_ssh_session", lambda env=None: ssh)
+    monkeypatch.setattr(cli_module, "inherit_graphical_session", lambda env: dict(env))
+    monkeypatch.setattr(cli_module, "has_graphical_session", lambda env=None: graphical)
+    monkeypatch.setattr(
+        cli_module,
+        "run_d2l_passthrough",
+        lambda args, interactive=False, env=None: visible.append(list(args)) or 0,
+    )
+    return visible
+
+
+def _fake_renewal(monkeypatch: pytest.MonkeyPatch, code: int, out: str = "", err: str = "") -> list[list[str]]:
+    calls: list[list[str]] = []
+    monkeypatch.setattr(cli_module, "_has_saved_sign_in", lambda: True)
+    monkeypatch.setattr(
+        cli_module,
+        "run_d2l_captured",
+        lambda args, timeout=0: calls.append(list(args)) or (code, out, err),
+    )
+    return calls
+
+
 def test_logout_clears_only_local_auth_state(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(cli_module, "clear_auth_state", lambda: ["token.json", "browser_profile"])
 
@@ -329,3 +362,87 @@ def test_session_import_via_stdin_rejects_garbage(monkeypatch: pytest.MonkeyPatc
 
     assert result.exit_code != 0
     assert "not a Ufora session bundle" in result.output
+
+
+def test_login_reuses_saved_sign_in_without_a_window(monkeypatch: pytest.MonkeyPatch) -> None:
+    visible = _fake_login_env(monkeypatch)
+    renewals = _fake_renewal(monkeypatch, 0, out="Ufora token renewed; valid until Fri Oct  2 14:00:00 2026.\n")
+
+    result = CliRunner().invoke(cli_module.cli, ["login"])
+
+    assert result.exit_code == 0, result.output
+    assert renewals == [["refresh"]]
+    assert visible == []
+    assert "valid until" in result.output
+
+
+def test_login_opens_window_when_saved_sign_in_needs_a_password(monkeypatch: pytest.MonkeyPatch) -> None:
+    visible = _fake_login_env(monkeypatch)
+    _fake_renewal(
+        monkeypatch,
+        1,
+        err=(
+            "Your Ufora session needs a fresh sign-in. Run: ufora login\n"
+            "  headless renewal Microsoft asks for a credential (at https://login.microsoftonline.com/x)\n"
+        ),
+    )
+
+    result = CliRunner().invoke(cli_module.cli, ["login", "--channel", "chrome"])
+
+    assert result.exit_code == 0, result.output
+    assert visible == [["login", "--channel", "chrome"]]
+    assert "Microsoft asks for a credential" in result.output
+    assert "Run: ufora login" not in result.output
+
+
+def test_login_interactive_skips_saved_sign_in(monkeypatch: pytest.MonkeyPatch) -> None:
+    visible = _fake_login_env(monkeypatch)
+    renewals = _fake_renewal(monkeypatch, 0)
+
+    result = CliRunner().invoke(cli_module.cli, ["login", "--interactive"])
+
+    assert result.exit_code == 0, result.output
+    assert renewals == []
+    assert visible == [["login", "--channel", "auto"]]
+
+
+def test_login_without_saved_sign_in_goes_straight_to_window(monkeypatch: pytest.MonkeyPatch) -> None:
+    visible = _fake_login_env(monkeypatch)
+    calls: list[list[str]] = []
+    monkeypatch.setattr(cli_module, "run_d2l_captured", lambda args, timeout=0: calls.append(list(args)) or (0, "", ""))
+
+    result = CliRunner().invoke(cli_module.cli, ["login"])
+
+    assert result.exit_code == 0, result.output
+    assert calls == []
+    assert visible == [["login", "--channel", "auto"]]
+
+
+def test_login_over_ssh_succeeds_from_saved_sign_in(monkeypatch: pytest.MonkeyPatch) -> None:
+    visible = _fake_login_env(monkeypatch, ssh=True, graphical=False)
+    _fake_renewal(monkeypatch, 0, out="Ufora token renewed.\n")
+
+    result = CliRunner().invoke(cli_module.cli, ["login"])
+
+    assert result.exit_code == 0, result.output
+    assert visible == []
+
+
+def test_login_over_ssh_explains_session_transfer_when_password_needed(monkeypatch: pytest.MonkeyPatch) -> None:
+    visible = _fake_login_env(monkeypatch, ssh=True, graphical=False)
+    _fake_renewal(monkeypatch, 1, err="  headless renewal timed out at launch\n")
+
+    result = CliRunner().invoke(cli_module.cli, ["login"])
+
+    assert result.exit_code != 0
+    assert "ufora session export" in result.output
+    assert visible == []
+
+
+def test_login_rejects_headless_with_interactive(monkeypatch: pytest.MonkeyPatch) -> None:
+    visible = _fake_login_env(monkeypatch)
+
+    result = CliRunner().invoke(cli_module.cli, ["login", "--headless", "--interactive"])
+
+    assert result.exit_code != 0
+    assert visible == []

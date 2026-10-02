@@ -264,3 +264,36 @@ def test_clear_stale_chromium_locks_keeps_live_pid_lock(tmp_path) -> None:
 
     assert core.clear_stale_chromium_locks(profile) is False
     assert (profile / "SingletonLock").is_symlink()
+
+
+def test_captured_run_returns_sanitized_output_without_echo(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(core, "harden_d2l_state", lambda **kwargs: None)
+    monkeypatch.setattr(
+        core.subprocess,
+        "run",
+        lambda *_args, **_kwargs: SimpleNamespace(returncode=1, stdout="", stderr="Run d2l login\x1b[31m\n"),
+    )
+
+    code, out, err = core.run_d2l_captured(["refresh"])
+
+    assert code == 1
+    assert out == ""
+    assert "ufora login" in err
+    assert "\x1b" not in err
+    assert capsys.readouterr().err == ""
+
+
+def test_captured_run_reports_timeout_as_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(core, "harden_d2l_state", lambda **kwargs: None)
+
+    def slow(*_args, **kwargs):
+        raise core.subprocess.TimeoutExpired(cmd="refresh", timeout=kwargs["timeout"])
+
+    monkeypatch.setattr(core.subprocess, "run", slow)
+
+    code, _out, err = core.run_d2l_captured(["refresh"], timeout=5)
+
+    assert code == 1
+    assert "timed out after 5 seconds" in err
