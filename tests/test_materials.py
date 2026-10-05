@@ -217,6 +217,42 @@ def test_download_content_files_handles_modules_without_overwriting(monkeypatch:
         materials.download_content_files("TEST", "Project", tmp_path)
 
 
+def test_download_content_files_preserves_submodule_subdirectories(monkeypatch: pytest.MonkeyPatch, tmp_path):
+    class SubmoduleClient(FakeClient):
+        def content_toc(self, _org_id):
+            return {
+                "Modules": [
+                    {
+                        "ModuleId": 1,
+                        "Title": "RootModule",
+                        "Topics": [
+                            {"TopicId": 101, "Title": "root_file.pdf", "TypeIdentifier": "File"}
+                        ],
+                        "Modules": [
+                            {
+                                "ModuleId": 2,
+                                "Title": "SubSection",
+                                "Topics": [
+                                    {"TopicId": 102, "Title": "sub_file.pdf", "TypeIdentifier": "File"}
+                                ],
+                                "Modules": [],
+                            }
+                        ],
+                    }
+                ]
+            }
+
+    monkeypatch.setattr(materials, "_client_and_resolver", lambda: (SubmoduleClient(), FakeResolver()))
+    monkeypatch.setattr(materials, "_overview_for", lambda client, org_id: OVERVIEW)
+
+    results = materials.download_content_files("TEST", "RootModule", tmp_path)
+    assert len(results) == 2
+    assert (tmp_path / "chapter.pdf").read_bytes() == b"pdf-bytes"
+    assert (tmp_path / "SubSection" / "chapter.pdf").read_bytes() == b"pdf-bytes"
+
+
+
+
 def test_download_assignment_files_refuses_existing_destination(monkeypatch: pytest.MonkeyPatch, tmp_path):
     class AssignmentClient(FakeClient):
         def assignments(self, _org_id):
