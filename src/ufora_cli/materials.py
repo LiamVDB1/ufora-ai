@@ -363,8 +363,14 @@ def _safe_filename(value: str, fallback: str) -> str:
     name = "".join("_" if char in '<>:"/\\|?*' else char for char in name).rstrip(" .")
     if not name:
         return fallback
+    p = Path(name)
+    stem = p.stem.rstrip(" .")
+    suffix = p.suffix.rstrip(" .")
+    if not stem:
+        return fallback
+    name = f"{stem}{suffix}"
     reserved = {"CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in range(1, 10)), *(f"LPT{i}" for i in range(1, 10))}
-    if name.split(".", 1)[0].upper() in reserved:
+    if stem.upper() in reserved:
         return fallback
     if len(name.encode("utf-8")) > 200:
         return fallback
