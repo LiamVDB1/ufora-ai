@@ -40,16 +40,35 @@ UGENT_TIMEZONE = ZoneInfo("Europe/Brussels")
 def _load_saved_token_only() -> str:
     """Load only Ufora's fixed local token file; never inherit cwd/env credentials."""
     data = d2l_auth._read_token_file()
+    auth_cmd = importlib.import_module("d2l.commands.auth_cmd")
+
     if not isinstance(data, dict):
-        raise TokenNotFoundError("No saved Ufora token found. Run: ufora login")
+        if hasattr(auth_cmd, "attempt_auto_login") and auth_cmd.attempt_auto_login():
+            data = d2l_auth._read_token_file()
+        if not isinstance(data, dict):
+            raise TokenNotFoundError("No saved Ufora token found. Run: ufora login")
 
     token = data.get("token")
     claims = d2l_auth._parse_bearer_claims(token)
     if not claims:
-        raise TokenNotFoundError("Saved Ufora token is invalid. Run: ufora login")
+        if hasattr(auth_cmd, "attempt_auto_login") and auth_cmd.attempt_auto_login():
+            data = d2l_auth._read_token_file()
+            if isinstance(data, dict):
+                token = data.get("token")
+                claims = d2l_auth._parse_bearer_claims(token)
+        if not claims:
+            raise TokenNotFoundError("Saved Ufora token is invalid. Run: ufora login")
 
     exp = claims.get("exp", data.get("exp", 0))
     if not isinstance(exp, int | float) or exp <= time.time():
+        if hasattr(auth_cmd, "attempt_auto_login") and auth_cmd.attempt_auto_login():
+            fresh_data = d2l_auth._read_token_file()
+            if isinstance(fresh_data, dict):
+                fresh_token = fresh_data.get("token")
+                fresh_claims = d2l_auth._parse_bearer_claims(fresh_token)
+                fresh_exp = fresh_claims.get("exp", fresh_data.get("exp", 0)) if fresh_claims else 0
+                if isinstance(fresh_exp, int | float) and fresh_exp > time.time():
+                    return fresh_token
         raise TokenExpiredError("Saved Ufora token is expired. Run: ufora login")
     return token
 
