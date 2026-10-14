@@ -195,6 +195,9 @@ def test_safe_filename_never_creates_hidden_control_file():
     assert _safe_filename("\x1b]52;c;payload\x07notes.txt", "topic-99") == "topic-99"
     assert _safe_filename("CON.txt", "topic-99") == "topic-99"
     assert _safe_filename('week:1?notes.pdf', "topic-99") == "week_1_notes.pdf"
+    assert _safe_filename("V_Meter_2 .mp4", "topic-99") == "V_Meter_2.mp4"
+    assert _safe_filename("Inleiding 2026 - 2027 .pptx", "topic-99") == "Inleiding 2026 - 2027.pptx"
+    assert _safe_filename("test..pdf", "topic-99") == "test.pdf"
 
 
 def test_download_single_content_file_returns_none_for_module(monkeypatch: pytest.MonkeyPatch, tmp_path):
